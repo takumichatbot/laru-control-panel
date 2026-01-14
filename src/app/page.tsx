@@ -408,7 +408,7 @@ export default function LARUControlPanel() {
                   <span className="metric-label">最終同期</span>
                   <span className="metric-value">{formatTS(unit.metrics.lastSync).split(' ')[1]}</span>
                 </div>
-                {unit.id === 'flastal' && (
+                {unit.id === 'flastal' && 'dailyUsers' in unit.metrics && (
                   <>
                     <div className="metric-line">
                       <span className="metric-label">日次利用者</span>
@@ -420,7 +420,7 @@ export default function LARUControlPanel() {
                     </div>
                   </>
                 )}
-                {unit.id === 'larubot' && (
+                {unit.id === 'larubot' && 'activeChats' in unit.metrics && (
                   <>
                     <div className="metric-line">
                       <span className="metric-label">アクティブチャット</span>
@@ -432,7 +432,7 @@ export default function LARUControlPanel() {
                     </div>
                   </>
                 )}
-                {unit.id === 'laruvisona' && (
+                {unit.id === 'laruvisona' && 'bounceRate' in unit.metrics && (
                   <>
                     <div className="metric-line">
                       <span className="metric-label">直帰率</span>
@@ -607,19 +607,19 @@ export default function LARUControlPanel() {
                   </div>
                   <canvas ref={unit.mobileRef} className="mobile-waveform"></canvas>
                   <div className="mobile-unit-metrics">
-                    {unit.id === 'flastal' && (
+                    {unit.id === 'flastal' && 'dailyUsers' in unit.metrics && (
                       <div className="mobile-metric-row">
                         <span>利用者: {unit.metrics.dailyUsers.toLocaleString()}人</span>
                         <span>エラー: {unit.metrics.errorCount}件</span>
                       </div>
                     )}
-                    {unit.id === 'larubot' && (
+                    {unit.id === 'larubot' && 'activeChats' in unit.metrics && (
                       <div className="mobile-metric-row">
                         <span>チャット: {unit.metrics.activeChats}件</span>
                         <span>待機: {unit.metrics.queueSize}件</span>
                       </div>
                     )}
-                    {unit.id === 'laruvisona' && (
+                    {unit.id === 'laruvisona' && 'bounceRate' in unit.metrics && (
                       <div className="mobile-metric-row">
                         <span>直帰率: {unit.metrics.bounceRate.toFixed(1)}%</span>
                         <span>セッション: {Math.floor(unit.metrics.avgSessionTime / 60)}分</span>
