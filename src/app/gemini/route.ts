@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, Tool, FunctionDeclarationSchemaType } from "@google/generative-ai";
+import { GoogleGenerativeAI, Tool } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
@@ -12,23 +12,27 @@ export async function POST(req: Request) {
 
     const genAI = new GoogleGenerativeAI(apiKey);
 
-    // ツール（関数の定義）
+    // 最新のSDK仕様に基づいたツール定義
     const tools: Tool[] = [{
       functionDeclarations: [
         {
           name: "restart_service",
-          description: "指定されたシステムサービスを再起動します。",
+          description: "指定されたシステムサービスを再起動し、ステータスを初期化します。",
           parameters: {
-            type: FunctionDeclarationSchemaType.OBJECT,
+            // ここを文字列で直接指定することで型エラーを回避します
+            type: "object" as any, 
             properties: {
-              serviceId: { type: FunctionDeclarationSchemaType.STRING, description: "larubot, laruvisona, flastalのいずれか" }
+              serviceId: { 
+                type: "string" as any, 
+                description: "対象のID（larubot, laruvisona, flastalのいずれか）" 
+              }
             },
             required: ["serviceId"]
           }
         },
         {
           name: "optimize_all",
-          description: "全ノードの負荷を最適化します。"
+          description: "全ノードのCPU負荷を最適化し、システムを安定させます。"
         }
       ]
     }];
@@ -38,7 +42,6 @@ export async function POST(req: Request) {
     const result = await chat.sendMessage(message);
     const response = result.response;
 
-    // Geminiからの回答（テキスト、または関数呼び出し指示）を返す
     return NextResponse.json({
       text: response.text(),
       functionCalls: response.functionCalls()
@@ -46,6 +49,6 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("API Route Error:", error);
-    return NextResponse.json({ error: "通信に失敗しました。" }, { status: 500 });
+    return NextResponse.json({ error: "通信エラーが発生しました。" }, { status: 500 });
   }
 }
