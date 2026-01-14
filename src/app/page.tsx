@@ -71,7 +71,7 @@ export default function LaruNexusUltimate() {
   }, [services, addLog]);
 
   // --- Gemini API Gateway ---
-  const sendToGemini = async (text: string) => {
+  const sendToGemini = async (text?: string) => {
     const messageToSend = text || inputMessage;
     if (!messageToSend || isThinking) return;
 
@@ -120,191 +120,147 @@ export default function LaruNexusUltimate() {
   }, [isLive]);
 
   return (
-    <div className="nexus-fortress flex flex-col h-screen overflow-hidden bg-black text-white selection:bg-cyan-500/30">
+    <div className="nexus-fortress" style={{ 
+      height: '100vh', 
+      display: 'flex', 
+      flexDirection: 'column', 
+      backgroundColor: '#000', 
+      color: '#fff',
+      position: 'relative',
+      overflow: 'hidden'
+    }}>
+      <style dangerouslySetInnerHTML={{ __html: `
+        .grid-overlay {
+          position: fixed; inset: 0;
+          background-image: linear-gradient(rgba(6,182,212,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(6,182,212,0.05) 1px, transparent 1px);
+          background-size: 30px 30px; pointer-events: none; z-index: 0;
+        }
+        @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .mobile-only { display: none; }
+        .desktop-flex { display: flex; }
+        @media (max-width: 768px) {
+          .desktop-flex { display: none; }
+          .mobile-only { display: flex; }
+          .mobile-content { display: none; }
+          .mobile-content.active { display: flex; flex-direction: column; flex: 1; overflow-y: auto; }
+        }
+      `}} />
       <div className="grid-overlay" />
 
-      {/* --- Global Header --- */}
-      <header className="h-14 flex items-center justify-between px-6 border-b border-cyan-500/30 bg-black/90 backdrop-blur-md z-[1100]">
-        <div className="flex items-center gap-3">
-          <div className="w-3 h-3 bg-cyan-500 shadow-[0_0_10px_#06b6d4] animate-pulse" />
-          <h1 className="text-sm md:text-lg font-black tracking-widest text-cyan-400">
-            LARU NEXUS <span className="hidden md:inline text-xs text-gray-600 font-normal">v10.2.0-ULTIMATE</span>
+      {/* --- Header --- */}
+      <header style={{ 
+        height: '60px', borderBottom: '1px solid rgba(0,242,255,0.3)', 
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
+        padding: '0 20px', background: 'rgba(0,0,0,0.9)', zIndex: 1100, backdropFilter: 'blur(10px)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ width: '10px', height: '10px', backgroundColor: '#00f2ff', boxShadow: '0 0 10px #00f2ff' }} />
+          <h1 style={{ fontSize: '18px', fontWeight: 900, color: '#00f2ff', letterSpacing: '2px' }}>
+            LARU NEXUS <span style={{ fontSize: '10px', color: '#444', fontWeight: 400 }}>v10.5.0-STABLE</span>
           </h1>
         </div>
-        <div className="flex gap-4 text-[10px] font-mono">
-          <div className="text-green-500 hidden sm:block">[ STATUS: ONLINE ]</div>
-          <div className={`${isLive ? 'text-cyan-400' : 'text-gray-600'}`}>
-            [ NEURAL_LINK: {isLive ? 'ACTIVE' : 'STANDBY'} ]
-          </div>
+        <div style={{ fontSize: '10px', color: isLive ? '#00f2ff' : '#444' }}>
+          [ NEURAL_LINK: {isLive ? 'ACTIVE' : 'STANDBY'} ]
         </div>
       </header>
 
-      {/* --- Main Content Layout --- */}
-      <div className="flex-1 relative flex flex-col md:flex-row overflow-hidden z-10">
-        
-        {/* Mobile Tab Navigation */}
-        <nav className="md:hidden flex border-b border-white/10 bg-black/50">
-          {(['status', 'nexus', 'terminal'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-3 text-[10px] font-bold tracking-widest uppercase transition-all ${
-                activeTab === tab ? 'text-cyan-400 bg-cyan-500/10 border-b-2 border-cyan-400' : 'text-gray-500'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </nav>
+      {/* --- Mobile Tabs --- */}
+      <nav className="mobile-only" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: '#000' }}>
+        {(['status', 'nexus', 'terminal'] as const).map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)} style={{
+            flex: 1, padding: '15px 0', fontSize: '10px', fontWeight: 'bold', border: 'none',
+            background: activeTab === tab ? 'rgba(0,242,255,0.1)' : 'transparent',
+            color: activeTab === tab ? '#00f2ff' : '#666',
+            borderBottom: activeTab === tab ? '2px solid #00f2ff' : 'none'
+          }}>
+            {tab.toUpperCase()}
+          </button>
+        ))}
+      </nav>
 
-        {/* 1. Status Column (Left) */}
-        <aside className={`${
-          activeTab === 'status' ? 'flex' : 'hidden'
-        } md:flex flex-col w-full md:w-[320px] lg:w-[360px] border-r border-white/10 bg-black/60 overflow-y-auto p-5`}>
-          <h2 className="text-[11px] font-bold text-cyan-400 mb-6 tracking-widest border-b border-cyan-500/20 pb-2">
-            NODE_MONITORING
-          </h2>
-          <div className="space-y-6">
-            {Object.values(services).map(s => (
-              <div key={s.id} className="group p-4 border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-all relative overflow-hidden">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <div className="text-xs font-bold" style={{ color: s.color }}>{s.name}</div>
-                    <div className="text-[9px] text-gray-500 font-mono mt-1">{s.description}</div>
-                  </div>
-                  <div className={`text-[9px] px-2 py-0.5 border ${s.status === 'BUSY' ? 'border-yellow-500/50 text-yellow-500' : 'border-gray-500/50 text-gray-500'}`}>
-                    {s.status}
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[9px] font-mono text-gray-400">
-                    <span>CPU_LOAD</span>
-                    <span>{s.cpu.toFixed(1)}%</span>
-                  </div>
-                  <div className="h-1 bg-gray-900 overflow-hidden">
-                    <div 
-                      className="h-full transition-all duration-500 ease-out shadow-[0_0_8px_currentColor]"
-                      style={{ width: `${s.cpu}%`, backgroundColor: s.color, color: s.color }}
-                    />
-                  </div>
-                </div>
-                <div className="mt-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => sendToGemini(`${s.name}を再起動`)} className="flex-1 text-[8px] py-1 border border-white/20 hover:border-white/50 text-gray-400">RESTART</button>
-                  <button onClick={() => sendToGemini(`${s.name}を最適化`)} className="flex-1 text-[8px] py-1 border border-white/20 hover:border-white/50 text-gray-400">OPTIMIZE</button>
-                </div>
+      {/* --- Main Content --- */}
+      <div className="content-container" style={{ flex: 1, display: 'flex', position: 'relative', zIndex: 10, overflow: 'hidden' }}>
+        
+        {/* Left: Status */}
+        <aside className={`mobile-content ${activeTab === 'status' ? 'active' : ''}`} style={{
+          width: '320px', borderRight: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.6)', padding: '20px'
+        }}>
+          <h2 style={{ fontSize: '11px', color: '#00f2ff', marginBottom: '20px', borderBottom: '1px solid #222' }}>NODE_MONITORING</h2>
+          {Object.values(services).map(s => (
+            <div key={s.id} style={{ marginBottom: '20px', padding: '15px', border: '1px solid #222', background: 'rgba(255,255,255,0.02)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ color: s.color, fontWeight: 'bold', fontSize: '12px' }}>{s.name}</span>
+                <span style={{ fontSize: '10px', color: '#888' }}>{s.status}</span>
               </div>
-            ))}
-          </div>
+              <div style={{ height: '4px', background: '#111', marginBottom: '10px' }}>
+                <div style={{ width: `${s.cpu}%`, height: '100%', backgroundColor: s.color, boxShadow: `0 0 10px ${s.color}`, transition: 'width 0.5s' }} />
+              </div>
+              <div style={{ display: 'flex', gap: '5px' }}>
+                <button onClick={() => sendToGemini(`${s.name}を再起動`)} style={{ flex: 1, fontSize: '9px', padding: '5px', background: 'none', border: '1px solid #333', color: '#666' }}>RESTART</button>
+                <button onClick={() => sendToGemini(`${s.name}を最適化`)} style={{ flex: 1, fontSize: '9px', padding: '5px', background: 'none', border: '1px solid #333', color: '#666' }}>OPTIMIZE</button>
+              </div>
+            </div>
+          ))}
         </aside>
 
-        {/* 2. Nexus Core (Center) */}
-        <main className={`${
-          activeTab === 'nexus' ? 'flex' : 'hidden'
-        } md:flex flex-1 flex-col items-center justify-center relative p-10 bg-radial-at-c from-cyan-900/10 to-transparent`}>
-          <div className="relative w-64 h-64 md:w-80 md:h-80 flex items-center justify-center">
-            {/* Visualizer Rings */}
-            <div 
-              className="absolute inset-0 rounded-full border-2 border-cyan-500/20 transition-transform duration-150"
-              style={{ transform: `scale(${1 + audioLevel / 150})`, opacity: isLive ? 0.4 : 0.1 }}
-            />
-            <div className="absolute inset-4 rounded-full border border-dashed border-cyan-500/30 animate-[spin_20s_linear_infinite]" />
-            <div className="absolute inset-10 rounded-full border border-cyan-500/10 animate-[spin_15s_linear_infinite_reverse]" />
-            
-            <div className="relative z-10 text-center">
-              <div className="text-4xl md:text-5xl font-black tracking-[0.3em] text-white drop-shadow-[0_0_20px_rgba(6,182,212,0.8)]">
-                LARU
-              </div>
-              <div className="text-[10px] md:text-xs tracking-[0.6em] text-cyan-400 mt-2 font-bold ml-2">
-                NEXUS COMMAND
-              </div>
+        {/* Center: Nexus */}
+        <main className={`mobile-content ${activeTab === 'nexus' ? 'active' : ''}`} style={{
+          flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <div style={{ position: 'relative', width: '280px', height: '280px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ 
+              position: 'absolute', inset: 0, borderRadius: '50%', border: '2px solid #00f2ff',
+              opacity: isLive ? 0.4 : 0.1, transform: `scale(${1 + audioLevel / 150})`, transition: 'transform 0.1s'
+            }} />
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '40px', fontWeight: 900, color: '#fff', textShadow: '0 0 20px #00f2ff' }}>LARU</div>
+              <div style={{ fontSize: '10px', color: '#00f2ff', letterSpacing: '5px', marginTop: '5px' }}>NEXUS CORE</div>
             </div>
           </div>
-
-          <div className="mt-16 flex flex-col items-center gap-4">
-            <button
-              onClick={() => setIsLive(!isLive)}
-              className={`px-10 py-4 font-black tracking-[0.2em] text-sm transition-all duration-500 border-2 ${
-                isLive 
-                ? 'bg-red-500/10 border-red-500 text-red-500 shadow-[0_0_30px_rgba(239,68,68,0.3)]' 
-                : 'bg-cyan-500/10 border-cyan-500 text-cyan-400 shadow-[0_0_30px_rgba(6,182,212,0.2)]'
-              }`}
-            >
-              {isLive ? 'TERMINATE_LINK' : 'INITIATE_LINK'}
-            </button>
-            <div className="text-[9px] text-gray-600 font-mono animate-pulse">
-              {isLive ? '>>> RECEIVING AUDIO DATA_STREAM' : '>>> NEURAL ENGINE STANDBY'}
-            </div>
-          </div>
+          <button onClick={() => setIsLive(!isLive)} style={{
+            marginTop: '50px', padding: '15px 40px', background: isLive ? 'rgba(255,0,64,0.1)' : 'rgba(0,242,255,0.05)',
+            border: `2px solid ${isLive ? '#ff0040' : '#00f2ff'}`, color: isLive ? '#ff0040' : '#00f2ff',
+            fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.3s'
+          }}>
+            {isLive ? 'TERMINATE_LINK' : 'INITIATE_LINK'}
+          </button>
         </main>
 
-        {/* 3. Terminal Column (Right) */}
-        <section className={`${
-          activeTab === 'terminal' ? 'flex' : 'hidden'
-        } md:flex flex-col w-full md:w-[350px] lg:w-[420px] border-l border-white/10 bg-black/80`}>
-          <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black">
-            <span className="text-[10px] font-bold tracking-widest text-gray-500">TERMINAL_LOG</span>
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-ping" />
-          </div>
-          
-          <div className="flex-1 overflow-y-auto p-5 font-mono text-[10px] space-y-3 flex flex-col-reverse scrollbar-hide">
-            {isThinking && (
-              <div className="text-cyan-400 animate-pulse flex items-center gap-2">
-                <span className="w-1.5 h-3 bg-cyan-400" />
-                THINKING...
-              </div>
-            )}
-            {logs.map((log) => (
-              <div key={log.id} className="flex gap-3 leading-relaxed">
-                <span className="text-gray-600 shrink-0">[{log.time}]</span>
-                <span className={`${
-                  log.type === 'gem' ? 'text-white' : 
-                  log.type === 'sec' ? 'text-red-500' : 'text-cyan-600'
-                }`}>
-                  {log.type === 'gem' && <span className="mr-2 text-cyan-400">●</span>}
-                  {log.msg}
-                </span>
+        {/* Right: Terminal */}
+        <section className={`mobile-content ${activeTab === 'terminal' ? 'active' : ''}`} style={{
+          width: '380px', borderLeft: '1px solid rgba(255,255,255,0.1)', background: 'rgba(5,5,5,0.95)', display: 'flex', flexDirection: 'column'
+        }}>
+          <div style={{ padding: '15px', borderBottom: '1px solid #222', fontSize: '10px', color: '#666' }}>TERMINAL_LOG</div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column-reverse', gap: '10px' }}>
+            {isThinking && <div style={{ color: '#00f2ff', fontSize: '10px', animation: 'pulse 1s infinite' }}>THINKING...</div>}
+            {logs.map(log => (
+              <div key={log.id} style={{ fontSize: '11px', display: 'flex', gap: '10px' }}>
+                <span style={{ color: '#444' }}>[{log.time}]</span>
+                <span style={{ color: log.type === 'gem' ? '#fff' : log.type === 'sec' ? '#ff0040' : '#00b4d8' }}>{log.msg}</span>
               </div>
             ))}
           </div>
-
-          <div className="p-4 bg-black border-t border-white/10">
-            <div className="relative flex items-center">
-              <span className="absolute left-3 text-cyan-500 font-bold">&gt;</span>
-              <input
-                type="text"
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && sendToGemini('')}
-                placeholder="COMMAND..."
-                className="w-full bg-white/5 border border-white/10 py-3 pl-8 pr-4 text-xs font-mono text-cyan-100 placeholder:text-gray-700 focus:outline-none focus:border-cyan-500/50 transition-all"
-              />
-            </div>
+          <div style={{ padding: '20px', borderTop: '1px solid #222', background: '#000' }}>
+            <input 
+              type="text" 
+              value={inputMessage}
+              onChange={e => setInputMessage(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && sendToGemini()}
+              placeholder="COMMAND..."
+              style={{ width: '100%', background: 'none', border: 'none', borderBottom: '1px solid #333', color: '#39ff14', padding: '5px', fontSize: '12px', outline: 'none' }}
+            />
           </div>
         </section>
       </div>
 
-      <style jsx global>{`
-        .nexus-fortress {
-          --neon-cyan: #06b6d4;
+      {/* --- Desktop Media Queries (CSS override) --- */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media (min-width: 769px) {
+          .mobile-content { display: flex !important; }
+          .mobile-only { display: none !important; }
         }
-        .grid-overlay {
-          position: fixed;
-          inset: 0;
-          background-image: 
-            linear-gradient(rgba(6, 182, 212, 0.05) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(6, 182, 212, 0.05) 1px, transparent 1px);
-          background-size: 30px 30px;
-          pointer-events: none;
-          z-index: 0;
-        }
-        @keyframes spin-slow {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        .scrollbar-hide::-webkit-scrollbar {
-          display: none;
-        }
-      `}</style>
+      `}} />
     </div>
   );
 }
