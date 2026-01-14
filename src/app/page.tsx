@@ -1,61 +1,68 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 
-interface ServiceStatus {
+interface BusinessHub {
+  id: 'flastal' | 'larubot' | 'laruvisona';
   name: string;
-  url: string;
-  status: 'up' | 'down' | 'checking';
-  responseTime?: number;
-  uptime?: number;
+  icon: string;
+  color: string;
+  status: 'online' | 'offline' | 'warning';
+  metrics: {
+    primary: number;
+    secondary: number;
+    tertiary: string;
+  };
 }
 
-interface LARUbotStats {
-  totalResponses: number;
-  errorRate: number;
-  satisfaction: number;
-  activeUsers: number;
-}
-
-interface LARUVISONAStats {
-  pageViews: number;
-  uniqueVisitors: number;
-  unreadInquiries: number;
-  conversionRate: number;
+interface VoiceCommand {
+  id: string;
+  timestamp: Date;
+  command: string;
+  status: 'processing' | 'completed' | 'error';
+  response?: string;
 }
 
 export default function LARUNexus() {
-  // States
-  const [services, setServices] = useState<ServiceStatus[]>([
-    { name: 'Flastal', url: 'https://www.flastal.com', status: 'checking' },
-    { name: 'LARUbot', url: 'https://larubot.com', status: 'checking' },
-    { name: 'LARUVISONA', url: 'https://laruvisona.com', status: 'checking' }
+  // Core States
+  const [activeHub, setActiveHub] = useState<string | null>(null);
+  const [businessHubs, setBusinessHubs] = useState<BusinessHub[]>([
+    {
+      id: 'flastal',
+      name: 'Flastal',
+      icon: '🌸',
+      color: '#ff006e',
+      status: 'online',
+      metrics: { primary: 98.7, secondary: 1247, tertiary: 'Active Events' }
+    },
+    {
+      id: 'larubot',
+      name: 'LARUbot',
+      icon: '🤖',
+      color: '#00f2ff',
+      status: 'online', 
+      metrics: { primary: 94.2, secondary: 8341, tertiary: 'AI Responses' }
+    },
+    {
+      id: 'laruvisona',
+      name: 'LARUVISONA',
+      icon: '🏢',
+      color: '#39ff14',
+      status: 'online',
+      metrics: { primary: 15847, secondary: 3291, tertiary: 'Page Views' }
+    }
   ]);
   
-  const [larubotStats, setLarubotStats] = useState<LARUbotStats>({
-    totalResponses: 0,
-    errorRate: 0,
-    satisfaction: 0,
-    activeUsers: 0
-  });
+  const [voiceCommands, setVoiceCommands] = useState<VoiceCommand[]>([]);
+  const [isTyping, setIsTyping] = useState(false);
+  const [currentTypedText, setCurrentTypedText] = useState('');
   
-  const [laruVisonaStats, setLaruVisonaStats] = useState<LARUVISONAStats>({
-    pageViews: 0,
-    uniqueVisitors: 0,
-    unreadInquiries: 0,
-    conversionRate: 0
-  });
-  
-  const [activeTab, setActiveTab] = useState('nexus');
-  const [isRunningSystemTest, setIsRunningSystemTest] = useState(false);
-  const [geminiLiveStatus, setGeminiLiveStatus] = useState<'waiting' | 'active' | 'processing'>('waiting');
-  const [commandLogs, setCommandLogs] = useState<string[]>([]);
-  
-  // Canvas refs for animations
+  // Canvas Refs for Animations
   const heartbeatCanvasRef = useRef<HTMLCanvasElement>(null);
   const gridCanvasRef = useRef<HTMLCanvasElement>(null);
+  const scanLineRef = useRef<HTMLDivElement>(null);
   
-  // Heartbeat animation
+  // Heartbeat Animation for AI Success Rate
   useEffect(() => {
     const canvas = heartbeatCanvasRef.current;
     if (!canvas) return;
@@ -63,31 +70,48 @@ export default function LARUNexus() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
-    canvas.width = 300;
-    canvas.height = 60;
+    canvas.width = 400;
+    canvas.height = 100;
     
     let x = 0;
+    let heartRate = businessHubs.find(h => h.id === 'larubot')?.metrics.primary || 94;
+    
     const animate = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = '#00ff88';
-      ctx.lineWidth = 2;
+      
+      // Gradient for the line
+      const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
+      gradient.addColorStop(0, '#39ff14');
+      gradient.addColorStop(0.5, '#00f2ff');
+      gradient.addColorStop(1, '#39ff14');
+      
+      ctx.strokeStyle = gradient;
+      ctx.lineWidth = 3;
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = '#39ff14';
       ctx.beginPath();
       
-      for (let i = 0; i < canvas.width; i++) {
-        const y = 30 + Math.sin((i + x) * 0.02) * 10 + Math.sin((i + x) * 0.1) * 5;
+      for (let i = 0; i < canvas.width; i += 2) {
+        const baseY = canvas.height / 2;
+        const heartbeat = Math.sin((i + x) * 0.05) * 20;
+        const pulse = heartRate > 90 ? Math.sin((i + x) * 0.2) * 15 : 0;
+        const noise = (Math.random() - 0.5) * 2;
+        
+        const y = baseY + heartbeat + pulse + noise;
+        
         if (i === 0) ctx.moveTo(i, y);
         else ctx.lineTo(i, y);
       }
       
       ctx.stroke();
-      x += 2;
+      x += 3;
       requestAnimationFrame(animate);
     };
     
     animate();
-  }, []);
+  }, [businessHubs]);
   
-  // Grid background animation
+  // Grid Background Animation
   useEffect(() => {
     const canvas = gridCanvasRef.current;
     if (!canvas) return;
@@ -95,417 +119,377 @@ export default function LARUNexus() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    const resizeCanvas = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
     
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+    
+    let animationId: number;
     let time = 0;
+    
     const animate = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = '#00ffff20';
-      ctx.lineWidth = 1;
       
       const gridSize = 50;
-      for (let x = 0; x < canvas.width; x += gridSize) {
+      const offsetX = (time * 0.5) % gridSize;
+      const offsetY = (time * 0.3) % gridSize;
+      
+      // Flowing grid lines
+      ctx.strokeStyle = 'rgba(0, 242, 255, 0.1)';
+      ctx.lineWidth = 1;
+      
+      // Vertical lines
+      for (let x = -gridSize + offsetX; x < canvas.width + gridSize; x += gridSize) {
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, canvas.height);
         ctx.stroke();
       }
       
-      for (let y = 0; y < canvas.height; y += gridSize) {
+      // Horizontal lines
+      for (let y = -gridSize + offsetY; y < canvas.height + gridSize; y += gridSize) {
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(canvas.width, y);
         ctx.stroke();
       }
       
-      time += 0.01;
-      requestAnimationFrame(animate);
+      // Occasional scanning effect
+      if (Math.random() < 0.005) {
+        const scanY = Math.random() * canvas.height;
+        const gradient = ctx.createLinearGradient(0, scanY - 2, 0, scanY + 2);
+        gradient.addColorStop(0, 'transparent');
+        gradient.addColorStop(0.5, 'rgba(57, 255, 20, 0.8)');
+        gradient.addColorStop(1, 'transparent');
+        
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, scanY - 2, canvas.width, 4);
+      }
+      
+      time += 1;
+      animationId = requestAnimationFrame(animate);
     };
     
     animate();
     
-    const handleResize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-  
-  // Service monitoring
-  const checkServiceStatus = async (service: ServiceStatus): Promise<ServiceStatus> => {
-    const startTime = Date.now();
-    try {
-      const response = await fetch(service.url, { 
-        mode: 'no-cors',
-        cache: 'no-cache'
-      });
-      return {
-        ...service,
-        status: 'up',
-        responseTime: Date.now() - startTime,
-        uptime: Math.random() * 99 + 99
-      };
-    } catch (error) {
-      return {
-        ...service,
-        status: 'down',
-        responseTime: undefined,
-        uptime: 0
-      };
-    }
-  };
-  
-  // Mock data generators
-  const generateLARUbotStats = (): LARUbotStats => ({
-    totalResponses: Math.floor(Math.random() * 10000) + 50000,
-    errorRate: Math.random() * 2,
-    satisfaction: Math.random() * 20 + 80,
-    activeUsers: Math.floor(Math.random() * 500) + 1200
-  });
-  
-  const generateLARUVISONAStats = (): LARUVISONAStats => ({
-    pageViews: Math.floor(Math.random() * 5000) + 25000,
-    uniqueVisitors: Math.floor(Math.random() * 2000) + 8000,
-    unreadInquiries: Math.floor(Math.random() * 10),
-    conversionRate: Math.random() * 5 + 2
-  });
-  
-  // System-wide integration test
-  const runIntegratedSystemTest = async () => {
-    setIsRunningSystemTest(true);
-    
-    // Test all services
-    const updatedServices = await Promise.all(
-      services.map(service => checkServiceStatus(service))
-    );
-    setServices(updatedServices);
-    
-    // Simulate AI coherence test
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Update stats
-    setLarubotStats(generateLARUbotStats());
-    setLaruVisonaStats(generateLARUVISONAStats());
-    
-    setIsRunningSystemTest(false);
-  };
-  
-  // Gemini Live simulation
-  const simulateGeminiCommand = (command: string) => {
-    const timestamp = new Date().toLocaleTimeString('ja-JP');
-    setCommandLogs(prev => [
-      `${timestamp}: "${command}" → タスク受理・実行中`,
-      ...prev.slice(0, 9)
-    ]);
-  };
-  
-  // Initialize
-  useEffect(() => {
-    runIntegratedSystemTest();
-    
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(() => {
-      runIntegratedSystemTest();
-    }, 30000);
-    
-    // Simulate periodic Gemini commands
-    const commandInterval = setInterval(() => {
-      const mockCommands = [
-        'システム全体の健全性をチェックして',
-        'LARUbotの応答品質を最適化して',
-        'フラスタルの新規登録数を確認して',
-        'LARAVISONAのSEO状況を分析して'
-      ];
-      const randomCommand = mockCommands[Math.floor(Math.random() * mockCommands.length)];
-      simulateGeminiCommand(randomCommand);
-    }, 45000);
-    
     return () => {
-      clearInterval(interval);
-      clearInterval(commandInterval);
+      window.removeEventListener('resize', resizeCanvas);
+      cancelAnimationFrame(animationId);
     };
   }, []);
+  
+  // Typing Animation for Voice Commands
+  const typeText = useCallback(async (text: string) => {
+    setIsTyping(true);
+    setCurrentTypedText('');
+    
+    for (let i = 0; i <= text.length; i++) {
+      setCurrentTypedText(text.slice(0, i));
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    
+    setIsTyping(false);
+  }, []);
+  
+  // Simulate Voice Commands
+  const simulateVoiceCommand = useCallback(() => {
+    const commands = [
+      'システム統合ステータスを確認して',
+      'LARUbotの応答品質を最適化して',
+      'フラスタルの新規イベント数を表示して',
+      'LARAVISONAのトラフィック分析を実行',
+      'Gemini Live待機モードを開始'
+    ];
+    
+    const randomCommand = commands[Math.floor(Math.random() * commands.length)];
+    const newCommand: VoiceCommand = {
+      id: Date.now().toString(),
+      timestamp: new Date(),
+      command: randomCommand,
+      status: 'processing'
+    };
+    
+    setVoiceCommands(prev => [newCommand, ...prev.slice(0, 9)]);
+    typeText(randomCommand);
+    
+    // Complete after delay
+    setTimeout(() => {
+      setVoiceCommands(prev => 
+        prev.map(cmd => 
+          cmd.id === newCommand.id 
+            ? { ...cmd, status: 'completed', response: '[OK] TASK_COMPLETED' }
+            : cmd
+        )
+      );
+    }, 3000);
+  }, [typeText]);
+  
+  // Update metrics periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setBusinessHubs(prev => prev.map(hub => ({
+        ...hub,
+        metrics: {
+          ...hub.metrics,
+          primary: hub.metrics.primary + (Math.random() - 0.5) * 2,
+          secondary: hub.metrics.secondary + Math.floor(Math.random() * 10)
+        }
+      })));
+    }, 5000);
+    
+    return () => clearInterval(interval);
+  }, []);
+  
+  // Auto-generate voice commands
+  useEffect(() => {
+    const interval = setInterval(simulateVoiceCommand, 15000);
+    return () => clearInterval(interval);
+  }, [simulateVoiceCommand]);
 
   return (
-    <div className="min-h-screen bg-black text-white overflow-hidden relative">
-      {/* Grid Background */}
+    <div className="nexus-container">
+      {/* Animated Grid Background */}
       <canvas 
         ref={gridCanvasRef}
-        className="fixed inset-0 pointer-events-none z-0"
+        className="nexus-grid-bg"
+        style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 0 }}
       />
       
-      <div className="relative z-10 min-h-screen">
-        {/* Header - Cyberpunk Style */}
-        <div className="bg-gray-900/80 backdrop-blur-lg border-b border-cyan-500/30 sticky top-0 z-50">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-green-400 bg-clip-text text-transparent">
-                  ⚡ LARU-Nexus
-                </h1>
-                <p className="text-cyan-300/80">事業統括ハイテク要塞</p>
-              </div>
+      {/* Scan Line Effect */}
+      <div 
+        ref={scanLineRef}
+        className="nexus-scanline"
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '2px',
+          background: 'linear-gradient(90deg, transparent, #39ff14, transparent)',
+          animation: 'scan 4s linear infinite',
+          zIndex: 1
+        }}
+      />
+      
+      <div className="nexus-content">
+        {/* Header */}
+        <header className="nexus-header">
+          <div className="nexus-title">
+            <span className="nexus-logo">⚡</span>
+            <h1>LARU-Nexus</h1>
+            <span className="nexus-subtitle">事業統括ハイテク要塞</span>
+          </div>
+          <div className="nexus-status">
+            <div className="nexus-indicator nexus-indicator--online"></div>
+            <span>SYSTEM OPERATIONAL</span>
+          </div>
+        </header>
+
+        {/* Hologram Hub - Circular Menu */}
+        <section className="nexus-hologram-hub">
+          <div className="nexus-hub-container">
+            {businessHubs.map((hub, index) => {
+              const angle = (index * 120) - 90; // 120 degrees apart, starting from top
+              const radian = (angle * Math.PI) / 180;
+              const x = Math.cos(radian) * 120;
+              const y = Math.sin(radian) * 120;
               
-              {/* Gemini Live Status */}
-              <div className="flex items-center space-x-4">
-                <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg border ${
-                  geminiLiveStatus === 'active' ? 'bg-green-500/20 border-green-400' :
-                  geminiLiveStatus === 'processing' ? 'bg-yellow-500/20 border-yellow-400' :
-                  'bg-blue-500/20 border-blue-400'
-                }`}>
-                  <div className={`w-2 h-2 rounded-full ${
-                    geminiLiveStatus === 'active' ? 'bg-green-400 animate-pulse' :
-                    geminiLiveStatus === 'processing' ? 'bg-yellow-400 animate-pulse' :
-                    'bg-blue-400 animate-pulse'
-                  }`}></div>
-                  <span className="text-sm">
-                    Gemini Live {
-                      geminiLiveStatus === 'active' ? 'アクティブ' :
-                      geminiLiveStatus === 'processing' ? '処理中' :
-                      '待機中'
-                    }
-                  </span>
-                </div>
+              return (
+                <button
+                  key={hub.id}
+                  className={`nexus-hub-node ${activeHub === hub.id ? 'nexus-hub-node--active' : ''}`}
+                  style={{
+                    transform: `translate(${x}px, ${y}px)`,
+                    borderColor: hub.color,
+                    color: activeHub === hub.id ? '#000000' : hub.color,
+                    backgroundColor: activeHub === hub.id ? hub.color : 'transparent'
+                  }}
+                  onClick={() => setActiveHub(activeHub === hub.id ? null : hub.id)}
+                >
+                  <div className="nexus-hub-icon">{hub.icon}</div>
+                  <div className="nexus-hub-name">{hub.name}</div>
+                  <div className="nexus-hub-metric">{hub.metrics.primary.toFixed(1)}%</div>
+                </button>
+              );
+            })}
+            
+            {/* Central Core */}
+            <div className="nexus-hub-core">
+              <div className="nexus-hub-core-inner">
+                <span>NEXUS</span>
+                <span>CORE</span>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Navigation Tabs */}
-        <div className="bg-gray-800/60 backdrop-blur-sm border-b border-gray-700/50">
-          <div className="container mx-auto px-4">
-            <nav className="flex space-x-1">
-              {[
-                { id: 'nexus', label: '🌐 Nexus', icon: '⚡' },
-                { id: 'larubot', label: '🤖 LARUbot', icon: '🧠' },
-                { id: 'laruvisona', label: '🏢 LARUVISONA', icon: '💼' },
-                { id: 'flastal', label: '🌸 Flastal', icon: '🎨' },
-                { id: 'command', label: '🎤 Command', icon: '🗣️' }
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`px-6 py-3 text-sm font-medium rounded-t-lg transition-all duration-300 ${
-                    activeTab === tab.id
-                      ? 'bg-cyan-500/30 text-cyan-300 border-b-2 border-cyan-400'
-                      : 'text-gray-400 hover:text-cyan-300 hover:bg-gray-700/50'
-                  }`}
-                >
-                  {tab.icon} {tab.label}
-                </button>
-              ))}
-            </nav>
-          </div>
-        </div>
-
-        <div className="container mx-auto px-4 py-6 space-y-6">
-          {activeTab === 'nexus' && (
-            <div className="space-y-6">
-              {/* System Status Overview */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {services.map((service, index) => (
-                  <div key={service.name} 
-                       className="bg-gray-900/60 backdrop-blur-lg rounded-xl border border-cyan-500/30 p-6 hover:border-cyan-400/50 transition-all duration-300">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-cyan-300">{service.name}</h3>
-                      <div className={`w-4 h-4 rounded-full ${
-                        service.status === 'up' ? 'bg-green-400 animate-pulse' :
-                        service.status === 'down' ? 'bg-red-400' : 'bg-yellow-400 animate-pulse'
-                      }`}></div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">ステータス</span>
-                        <span className={
-                          service.status === 'up' ? 'text-green-400' :
-                          service.status === 'down' ? 'text-red-400' : 'text-yellow-400'
-                        }>
-                          {service.status === 'up' ? '稼働中' :
-                           service.status === 'down' ? '停止' : '確認中'}
-                        </span>
+        {/* Active Hub Details */}
+        {activeHub && (
+          <section className="nexus-hub-details">
+            {(() => {
+              const hub = businessHubs.find(h => h.id === activeHub);
+              if (!hub) return null;
+              
+              if (activeHub === 'larubot') {
+                return (
+                  <div className="nexus-detail-card">
+                    <h3>🤖 LARUbot AI監視センター</h3>
+                    <div className="nexus-heartbeat-container">
+                      <canvas 
+                        ref={heartbeatCanvasRef}
+                        className="nexus-heartbeat-canvas"
+                      />
+                      <div className="nexus-heartbeat-label">
+                        AI応答成功率: {hub.metrics.primary.toFixed(1)}%
                       </div>
-                      
-                      {service.responseTime && (
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">応答時間</span>
-                          <span className="text-cyan-300">{service.responseTime}ms</span>
+                    </div>
+                    <div className="nexus-ai-metrics">
+                      <div className="nexus-metric">
+                        <span className="nexus-metric-value">{hub.metrics.secondary.toLocaleString()}</span>
+                        <span className="nexus-metric-label">総処理数</span>
+                      </div>
+                      <div className="nexus-metric">
+                        <span className="nexus-metric-value">97.3%</span>
+                        <span className="nexus-metric-label">ユーザー満足度</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+              
+              if (activeHub === 'laruvisona') {
+                return (
+                  <div className="nexus-detail-card">
+                    <h3>🏢 LARUVISONA トラフィック統制</h3>
+                    <div className="nexus-3d-chart">
+                      {[...Array(7)].map((_, i) => (
+                        <div 
+                          key={i}
+                          className="nexus-3d-bar"
+                          style={{
+                            height: `${20 + Math.random() * 60}%`,
+                            animationDelay: `${i * 0.2}s`
+                          }}
+                        >
+                          <div className="nexus-3d-bar-top"></div>
+                          <div className="nexus-3d-bar-front"></div>
+                          <div className="nexus-3d-bar-right"></div>
                         </div>
-                      )}
-                      
-                      {service.uptime !== undefined && (
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">稼働率</span>
-                          <span className="text-green-400">{service.uptime.toFixed(2)}%</span>
-                        </div>
-                      )}
+                      ))}
+                    </div>
+                    <div className="nexus-traffic-metrics">
+                      <div className="nexus-metric">
+                        <span className="nexus-metric-value">{hub.metrics.primary.toLocaleString()}</span>
+                        <span className="nexus-metric-label">今日のPV</span>
+                      </div>
+                      <div className="nexus-metric">
+                        <span className="nexus-metric-value">{hub.metrics.secondary.toLocaleString()}</span>
+                        <span className="nexus-metric-label">ユニーク訪問</span>
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
+                );
+              }
+              
+              if (activeHub === 'flastal') {
+                return (
+                  <div className="nexus-detail-card">
+                    <h3>🌸 Flastal イベント制御</h3>
+                    <div className="nexus-flastal-grid">
+                      {[...Array(12)].map((_, i) => (
+                        <div 
+                          key={i} 
+                          className={`nexus-flastal-cell ${Math.random() > 0.7 ? 'nexus-flastal-cell--active' : ''}`}
+                        />
+                      ))}
+                    </div>
+                    <div className="nexus-flastal-metrics">
+                      <div className="nexus-metric">
+                        <span className="nexus-metric-value">{hub.metrics.primary.toFixed(1)}%</span>
+                        <span className="nexus-metric-label">稼働率</span>
+                      </div>
+                      <div className="nexus-metric">
+                        <span className="nexus-metric-value">{hub.metrics.secondary}</span>
+                        <span className="nexus-metric-label">アクティブイベント</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+              
+              return null;
+            })()}
+          </section>
+        )}
 
-              {/* System Heartbeat */}
-              <div className="bg-gray-900/60 backdrop-blur-lg rounded-xl border border-green-500/30 p-6">
-                <h3 className="text-lg font-semibold text-green-400 mb-4 flex items-center">
-                  💚 システム心拍数
-                </h3>
-                <canvas ref={heartbeatCanvasRef} className="w-full h-16"></canvas>
-                <div className="mt-2 text-sm text-gray-400">
-                  リアルタイム統合システム監視中...
-                </div>
-              </div>
-
-              {/* Integrated System Test */}
-              <div className="bg-gray-900/60 backdrop-blur-lg rounded-xl border border-purple-500/30 p-6">
-                <h3 className="text-lg font-semibold text-purple-400 mb-4">🚀 統合システムテスト</h3>
-                <p className="text-gray-300 mb-4">
-                  全3サイト（Flastal, LARUbot, LARUVISONA）の死活監視とAI整合性テストを実行
-                </p>
-                <button
-                  onClick={runIntegratedSystemTest}
-                  disabled={isRunningSystemTest}
-                  className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed py-4 px-6 rounded-lg font-semibold transition-all duration-300 transform hover:scale-105 active:scale-95"
-                >
-                  {isRunningSystemTest ? '⏳ 統合テスト実行中...' : '🌟 統合システムテスト開始'}
-                </button>
-              </div>
+        {/* Gemini Live Command Terminal */}
+        <section className="nexus-terminal">
+          <div className="nexus-terminal-header">
+            <div className="nexus-terminal-title">
+              <span className="nexus-terminal-icon">🎤</span>
+              Gemini Live司令塔
             </div>
-          )}
-
-          {activeTab === 'larubot' && (
-            <div className="space-y-6">
-              <div className="bg-gray-900/60 backdrop-blur-lg rounded-xl border border-blue-500/30 p-6">
-                <h2 className="text-2xl font-semibold text-blue-400 mb-6">🤖 LARUbot 管理センター</h2>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <div className="bg-blue-500/10 rounded-lg p-4 border border-blue-500/30">
-                    <div className="text-3xl font-bold text-blue-400">
-                      {larubotStats.totalResponses.toLocaleString()}
-                    </div>
-                    <div className="text-sm text-gray-400">総応答数</div>
-                  </div>
-                  
-                  <div className="bg-green-500/10 rounded-lg p-4 border border-green-500/30">
-                    <div className="text-3xl font-bold text-green-400">
-                      {larubotStats.errorRate.toFixed(1)}%
-                    </div>
-                    <div className="text-sm text-gray-400">エラー率</div>
-                  </div>
-                  
-                  <div className="bg-yellow-500/10 rounded-lg p-4 border border-yellow-500/30">
-                    <div className="text-3xl font-bold text-yellow-400">
-                      {larubotStats.satisfaction.toFixed(1)}%
-                    </div>
-                    <div className="text-sm text-gray-400">ユーザー満足度</div>
-                  </div>
-                  
-                  <div className="bg-purple-500/10 rounded-lg p-4 border border-purple-500/30">
-                    <div className="text-3xl font-bold text-purple-400">
-                      {larubotStats.activeUsers.toLocaleString()}
-                    </div>
-                    <div className="text-sm text-gray-400">アクティブユーザー</div>
-                  </div>
-                </div>
-              </div>
+            <div className="nexus-terminal-status">
+              <div className="nexus-indicator nexus-indicator--active"></div>
+              LISTENING
             </div>
-          )}
-
-          {activeTab === 'laruvisona' && (
-            <div className="space-y-6">
-              <div className="bg-gray-900/60 backdrop-blur-lg rounded-xl border border-orange-500/30 p-6">
-                <h2 className="text-2xl font-semibold text-orange-400 mb-6">🏢 LARUVISONA 管理センター</h2>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <div className="bg-orange-500/10 rounded-lg p-4 border border-orange-500/30">
-                    <div className="text-3xl font-bold text-orange-400">
-                      {laruVisonaStats.pageViews.toLocaleString()}
-                    </div>
-                    <div className="text-sm text-gray-400">ページビュー</div>
-                  </div>
-                  
-                  <div className="bg-green-500/10 rounded-lg p-4 border border-green-500/30">
-                    <div className="text-3xl font-bold text-green-400">
-                      {laruVisonaStats.uniqueVisitors.toLocaleString()}
-                    </div>
-                    <div className="text-sm text-gray-400">ユニーク訪問者</div>
-                  </div>
-                  
-                  <div className={`rounded-lg p-4 border ${
-                    laruVisonaStats.unreadInquiries > 0 ? 
-                    'bg-red-500/20 border-red-500/50' : 
-                    'bg-gray-500/10 border-gray-500/30'
-                  }`}>
-                    <div className={`text-3xl font-bold ${
-                      laruVisonaStats.unreadInquiries > 0 ? 
-                      'text-red-400 animate-pulse' : 
-                      'text-gray-400'
-                    }`}>
-                      {laruVisonaStats.unreadInquiries}
-                    </div>
-                    <div className="text-sm text-gray-400">未読問い合わせ</div>
-                  </div>
-                  
-                  <div className="bg-cyan-500/10 rounded-lg p-4 border border-cyan-500/30">
-                    <div className="text-3xl font-bold text-cyan-400">
-                      {laruVisonaStats.conversionRate.toFixed(1)}%
-                    </div>
-                    <div className="text-sm text-gray-400">コンバージョン率</div>
-                  </div>
-                </div>
+          </div>
+          
+          <div className="nexus-terminal-body">
+            {/* Current typing */}
+            {isTyping && (
+              <div className="nexus-terminal-line">
+                <span className="nexus-terminal-prompt">NEXUS:/ $ </span>
+                <span className="nexus-terminal-input">{currentTypedText}</span>
+                <span className="nexus-terminal-cursor">_</span>
               </div>
-            </div>
-          )}
-
-          {activeTab === 'command' && (
-            <div className="space-y-6">
-              <div className="bg-gray-900/60 backdrop-blur-lg rounded-xl border border-green-500/30 p-6">
-                <h2 className="text-2xl font-semibold text-green-400 mb-6">🎤 Gemini Live Command Center</h2>
-                
-                <div className="bg-black/50 rounded-lg p-4 border border-green-500/30 max-h-96 overflow-y-auto">
-                  <div className="text-sm text-green-400 font-mono">
-                    <div className="mb-4 text-green-300">// Command Log - リアルタイム音声指示受信</div>
-                    {commandLogs.length === 0 ? (
-                      <div className="text-gray-500">音声コマンド待機中...</div>
-                    ) : (
-                      commandLogs.map((log, index) => (
-                        <div key={index} className="mb-2 opacity-90 hover:opacity-100 transition-opacity">
-                          &gt; {log}
-                        </div>
-                      ))
-                    )}
+            )}
+            
+            {/* Command history */}
+            <div className="nexus-terminal-history">
+              {voiceCommands.map(cmd => (
+                <div key={cmd.id} className="nexus-terminal-command">
+                  <div className="nexus-terminal-line">
+                    <span className="nexus-terminal-timestamp">
+                      {cmd.timestamp.toLocaleTimeString()}
+                    </span>
+                    <span className="nexus-terminal-input">{cmd.command}</span>
                   </div>
+                  {cmd.response && (
+                    <div className="nexus-terminal-response">
+                      <span className="nexus-terminal-status">[OK]</span> TASK_COMPLETED
+                      <div className="nexus-terminal-pulse"></div>
+                    </div>
+                  )}
                 </div>
-                
-                <div className="mt-4 flex space-x-4">
-                  <button
-                    onClick={() => simulateGeminiCommand('全システムのヘルスチェックを実行して')}
-                    className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg transition-colors"
-                  >
-                    🩺 ヘルスチェック実行
-                  </button>
-                  <button
-                    onClick={() => simulateGeminiCommand('各サービスのパフォーマンスを最適化して')}
-                    className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors"
-                  >
-                    ⚡ パフォーマンス最適化
-                  </button>
-                </div>
-              </div>
+              ))}
             </div>
-          )}
-        </div>
+          </div>
+        </section>
 
-        {/* Floating Action Button - Mobile Optimized */}
-        <button
-          onClick={runIntegratedSystemTest}
-          disabled={isRunningSystemTest}
-          className="fixed bottom-6 right-6 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 disabled:opacity-50 w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-2xl transition-all duration-300 transform hover:scale-110 active:scale-95 z-50"
-        >
-          {isRunningSystemTest ? '⏳' : '⚡'}
-        </button>
+        {/* Thumb-Optimized Controls */}
+        <section className="nexus-thumb-controls">
+          <button 
+            className="nexus-thumb-btn nexus-thumb-btn--primary"
+            onClick={simulateVoiceCommand}
+          >
+            <span className="nexus-thumb-btn-icon">⚡</span>
+            <span className="nexus-thumb-btn-label">統合テスト</span>
+          </button>
+          
+          <button className="nexus-thumb-btn nexus-thumb-btn--secondary">
+            <span className="nexus-thumb-btn-icon">📊</span>
+            <span className="nexus-thumb-btn-label">メトリクス</span>
+          </button>
+          
+          <button className="nexus-thumb-btn nexus-thumb-btn--emergency">
+            <span className="nexus-thumb-btn-icon">🚨</span>
+            <span className="nexus-thumb-btn-label">緊急停止</span>
+          </button>
+        </section>
       </div>
     </div>
   );
