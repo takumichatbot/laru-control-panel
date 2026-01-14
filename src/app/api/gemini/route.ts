@@ -2,38 +2,41 @@ import { GoogleGenerativeAI, Tool } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
 /**
- * LARU NEXUS BACKEND API PROTOCOL v15.6 [FORCE_SYNC]
- * 環境変数の取得とエラーログを極限まで強化。
+ * ==============================================================================
+ * LARU NEXUS BACKEND API PROTOCOL v15.8 [FATAL_ERROR_FIX]
+ * ------------------------------------------------------------------------------
+ * 「THE STRING DID NOT MATCH THE EXPECTED PATTERN」を物理的に解決するパッチ。
+ * 不正な文字列パターンの自動クレンジング機能を搭載。
+ * ==============================================================================
  */
 
 export async function POST(req: Request) {
   try {
     const { message } = await req.json();
 
-    // RenderのEnvironment設定で登録した可能性のあるすべての変数名をチェック
-    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    // 1. 環境変数の取得（二重チェック）
+    let rawApiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
-    if (!apiKey) {
-      console.error("CRITICAL: API Key is missing.");
+    if (!rawApiKey) {
+      return NextResponse.json({ error: "API_KEY_NOT_FOUND" }, { status: 500 });
+    }
+
+    // 2. キーのクレンジング（文字列パターンの正常化）
+    // 前後の空白、改行、目に見えない制御文字をすべて排除
+    const cleanApiKey = rawApiKey.replace(/[\s\t\n\r]/g, '').trim();
+
+    // 3. パターンチェック（デバッグ用）
+    if (!cleanApiKey.startsWith("AIza")) {
       return NextResponse.json({ 
-        error: "API_KEY_MISSING",
-        details: "Renderの環境変数が設定されていないか、反映されていません。" 
+        error: "INVALID_PATTERN", 
+        details: "キーがAIzaで始まっていません。コピー範囲を再確認してください。" 
       }, { status: 500 });
     }
 
-    // キーの形式をチェック（AIzaで始まっているか、空白がないか）
-    const trimmedKey = apiKey.trim();
-    if (!trimmedKey.startsWith("AIza")) {
-      return NextResponse.json({ 
-        error: "INVALID_KEY_FORMAT",
-        details: "APIキーが'AIza'で始まっていません。コピーミスを確認してください。" 
-      }, { status: 500 });
-    }
-
-    const genAI = new GoogleGenerativeAI(trimmedKey);
+    const genAI = new GoogleGenerativeAI(cleanApiKey);
     const model = genAI.getGenerativeModel({ 
       model: "gemini-1.5-flash",
-      systemInstruction: "あなたはLARU NEXUSのコアAIです。齋藤拓海社長をサポートしてください。"
+      systemInstruction: "あなたはLARU NEXUSのコアAIです。齋藤拓海社長の指示に対し、プロフェッショナルな司令塔として応答してください。"
     });
 
     const chat = model.startChat();
@@ -46,11 +49,11 @@ export async function POST(req: Request) {
     });
 
   } catch (error: any) {
-    console.error("API Route Error:", error);
-    // Google API側からのエラーメッセージを詳細に返す
+    // 4. エラーの可視化
+    console.error("CRITICAL_AUTH_ERROR:", error);
     return NextResponse.json({ 
-      error: "GOOGLE_API_ERROR",
-      details: error.message 
+      error: "AUTH_PROTOCOL_REJECTED",
+      details: error.message.toUpperCase() // ここで詳細な理由を返す
     }, { status: 500 });
   }
 }
