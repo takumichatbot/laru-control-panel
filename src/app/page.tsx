@@ -64,6 +64,21 @@ export default function LARUControlPanel() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [darkMode, setDarkMode] = useState(true);
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
+  
+  // Gemini Live 連携状態
+  const [isGeminiListening, setIsGeminiListening] = useState(false);
+  const [geminiAdvice, setGeminiAdvice] = useState<string | null>(null);
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [trafficData, setTrafficData] = useState([
+    { country: 'Japan', users: 1247, lat: 35.6762, lng: 139.6503 },
+    { country: 'USA', users: 892, lat: 40.7128, lng: -74.0060 },
+    { country: 'Germany', users: 456, lat: 52.5200, lng: 13.4050 },
+    { country: 'UK', users: 234, lat: 51.5074, lng: -0.1278 },
+  ]);
+  
+  // サウンドフィードバック
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [hoveredUnit, setHoveredUnit] = useState<string | null>(null);
 
   const [businessMetrics, setBusinessMetrics] = useState<BusinessMetrics>({
     flastal: { 
@@ -377,8 +392,10 @@ export default function LARUControlPanel() {
           
           {businessUnits.map(unit => (
             <div key={unit.id} 
-              className={`business-unit ${unit.id}-unit ${selectedBusiness === unit.id ? 'active' : ''}`}
+              className={`business-unit ${unit.id}-unit ${selectedBusiness === unit.id ? 'active' : ''} ${hoveredUnit === unit.id ? 'hovered' : ''}`}
               onClick={() => setSelectedBusiness(selectedBusiness === unit.id ? null : unit.id)}
+              onMouseEnter={() => setHoveredUnit(unit.id)}
+              onMouseLeave={() => setHoveredUnit(null)}
               style={{ borderLeftColor: unit.color }}>
               
               <div className="unit-header">
@@ -386,12 +403,61 @@ export default function LARUControlPanel() {
                   <span className="unit-name">{unit.label}</span>
                   <span className="unit-japanese">{unit.japanese}</span>
                 </div>
-                <div 
-                  className="unit-status-dot" 
-                  style={{ backgroundColor: getStatusColor(unit.metrics.status) }}
-                  title={`ステータス: ${unit.metrics.status}`}
-                ></div>
+                <div className="unit-controls">
+                  <button
+                    className="quick-toggle deploy"
+                    title="デプロイ実行"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      terminalTypeCommand(`${unit.label}デプロイを実行中...`);
+                    }}
+                  >
+                    ⚡
+                  </button>
+                  <button
+                    className="quick-toggle maintenance"
+                    title="メンテナンス切り替え"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      terminalTypeCommand(`${unit.label}メンテナンスモード切り替え`);
+                    }}
+                  >
+                    🔧
+                  </button>
+                  <div 
+                    className="unit-status-dot" 
+                    style={{ backgroundColor: getStatusColor(unit.metrics.status) }}
+                    title={`ステータス: ${unit.metrics.status}`}
+                  ></div>
+                </div>
               </div>
+
+              {/* ホバー時の詳細情報 */}
+              {hoveredUnit === unit.id && (
+                <div className="hover-details">
+                  <div className="detail-section">
+                    <span className="detail-title">サーバー負荷状況</span>
+                    <div className="load-bar">
+                      <div 
+                        className="load-fill" 
+                        style={{ width: `${unit.id === 'flastal' ? businessMetrics.flastal.serverLoad : 0}%` }}
+                      ></div>
+                    </div>
+                    <span className="load-value">
+                      {unit.id === 'flastal' ? `${businessMetrics.flastal.serverLoad}%` : 'N/A'}
+                    </span>
+                  </div>
+                  <div className="detail-section">
+                    <span className="detail-title">直近のAPIエラーログ</span>
+                    <div className="error-log">
+                      {unit.id === 'flastal' && businessMetrics.flastal.errorCount > 0 ? 
+                        `${businessMetrics.flastal.errorCount}件のエラーを検出` : 
+                        '正常稼働中'
+                      }
+                    </div>
+                  </div>
+                </div>
+              )}
               
               <div className="unit-description">{unit.description}</div>
               

@@ -30,6 +30,70 @@ html, body {
   overflow: hidden;
 }
 
+/* 画面全体に走る走査線（スキャンライン）- ハイテク要塞の真髄 */
+.nexus-fortress::before {
+  content: "";
+  display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+              linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  z-index: 100;
+  background-size: 100% 4px, 3px 100%;
+  pointer-events: none;
+  opacity: 0.3;
+  animation: scanlineFlicker 8s ease-in-out infinite;
+}
+
+/* データフローアニメーション */
+.nexus-fortress::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    radial-gradient(1px 1px at 20px 30px, #00f2ff, transparent),
+    radial-gradient(1px 1px at 40px 70px, rgba(0, 242, 255, 0.4), transparent),
+    radial-gradient(1px 1px at 90px 40px, rgba(57, 255, 20, 0.3), transparent),
+    radial-gradient(1px 1px at 130px 80px, rgba(255, 0, 110, 0.2), transparent);
+  background-repeat: repeat;
+  background-size: 150px 100px;
+  animation: dataFlow 20s linear infinite;
+  opacity: 0.4;
+  pointer-events: none;
+  z-index: 2;
+}
+
+@keyframes scanlineFlicker {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.1; }
+  75% { opacity: 0.4; }
+}
+
+@keyframes dataFlow {
+  0% { transform: translate(0, 0); }
+  100% { transform: translate(-150px, -100px); }
+}
+
+/* グリッチ効果 */
+.glitch-effect {
+  animation: glitch 3s infinite;
+}
+
+@keyframes glitch {
+  0% { transform: translate(0); }
+  1% { transform: translate(-2px, 2px); }
+  2% { transform: translate(-2px, -2px); }
+  3% { transform: translate(2px, 2px); }
+  4% { transform: translate(2px, -2px); }
+  5% { transform: translate(0); }
+}
+
 /* Cyberpunk Grid Overlay - 10px間隔 */
 .grid-overlay {
   position: fixed;
@@ -275,12 +339,132 @@ html, body {
   font-weight: 500;
 }
 
+.unit-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quick-toggle {
+  width: 24px;
+  height: 24px;
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+}
+
+.quick-toggle:hover {
+  background: rgba(0, 242, 255, 0.2);
+  border-color: #00f2ff;
+  box-shadow: 0 0 8px rgba(0, 242, 255, 0.4);
+}
+
+.quick-toggle.deploy {
+  color: #39ff14;
+}
+
+.quick-toggle.maintenance {
+  color: #ffaa00;
+}
+
 .unit-status-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   box-shadow: 0 0 8px currentColor;
   margin-top: 2px;
+}
+
+/* ホバー時の詳細情報 */
+.hover-details {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.95);
+  border: 1px solid rgba(0, 242, 255, 0.3);
+  padding: 15px;
+  z-index: 50;
+  animation: fadeInUp 0.3s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.detail-section {
+  margin-bottom: 12px;
+}
+
+.detail-section:last-child {
+  margin-bottom: 0;
+}
+
+.detail-title {
+  font-size: 10px;
+  color: #00f2ff;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 6px;
+  font-family: 'Noto Sans JP', sans-serif;
+}
+
+.load-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.load-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #39ff14, #00f2ff);
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+
+.load-value {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.8);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.error-log {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.7);
+  font-family: 'JetBrains Mono', monospace;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 4px 6px;
+  border-radius: 2px;
+  border-left: 2px solid #ff006e;
+}
+
+/* ホバー効果の強化 */
+.business-unit.hovered {
+  background: rgba(0, 242, 255, 0.08);
+  transform: translateX(2px);
+  box-shadow: 
+    inset 0 0 20px rgba(0, 242, 255, 0.15),
+    2px 0 15px rgba(0, 242, 255, 0.1);
+}
+
+.business-unit {
+  position: relative;
 }
 
 .unit-description {
