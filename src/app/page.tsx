@@ -2,13 +2,13 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 
-// --- Types ---
+// --- 型定義 ---
 interface ServiceData {
   id: string;
   name: string;
   cpu: number;
   mem: number;
-  status: 'NOMINAL' | 'BUSY' | 'ERROR';
+  status: '正常稼働' | '高負荷' | 'エラー';
   color: string;
   description: string;
 }
@@ -20,63 +20,63 @@ interface LogEntry {
   time: string;
 }
 
-export default function LaruNexusUltimate() {
-  // UI States
-  const [activeTab, setActiveTab] = useState<'status' | 'nexus' | 'terminal'>('nexus');
+export default function LaruNexusUltimateJP() {
+  // UI状態
+  const [activeTab, setActiveTab] = useState<'監視' | 'コア' | 'ログ'>('コア');
   const [isLive, setIsLive] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isThinking, setIsThinking] = useState(false);
   const [inputMessage, setInputMessage] = useState('');
 
-  // Business States
+  // サービス状態
   const [services, setServices] = useState<Record<string, ServiceData>>({
-    larubot: { id: 'larubot', name: 'LARUBOT AI', cpu: 12, mem: 420, status: 'NOMINAL', color: '#00f2ff', description: 'Neural Chat Engine' },
-    laruvisona: { id: 'laruvisona', name: 'LARUVISONA', cpu: 8, mem: 180, status: 'NOMINAL', color: '#39ff14', description: 'Core Web Interface' },
-    flastal: { id: 'flastal', name: 'FLASTAL.COM', cpu: 32, mem: 1250, status: 'BUSY', color: '#ff006e', description: 'Distributed Node' }
+    larubot: { id: 'larubot', name: 'ラルボット AI', cpu: 12, mem: 420, status: '正常稼働', color: '#00f2ff', description: '対話型AIエンジン' },
+    laruvisona: { id: 'laruvisona', name: 'ラルビソナ', cpu: 8, mem: 180, status: '正常稼働', color: '#39ff14', description: '基幹ウェブインターフェース' },
+    flastal: { id: 'flastal', name: 'フラスタル', cpu: 32, mem: 1250, status: '高負荷', color: '#ff006e', description: 'マーケットプレイス・ノード' }
   });
 
-  // --- Logging Mechanism ---
+  // ログ追加
   const addLog = useCallback((msg: string, type: 'sys' | 'gem' | 'sec' = 'sys') => {
     const time = new Date().toLocaleTimeString('ja-JP', { hour12: false });
     const id = Math.random().toString(36).substr(2, 9);
     setLogs(prev => [{ id, msg, type, time }, ...prev.slice(0, 50)]);
   }, []);
 
-  // --- Function Calling Implementation ---
+  // --- システム操作関数 (Geminiが呼び出す) ---
   const executeLocalTool = useCallback((name: string, args: any) => {
     if (name === "restart_service") {
       const { serviceId } = args;
       if (services[serviceId]) {
         setServices(prev => ({
           ...prev,
-          [serviceId]: { ...prev[serviceId], status: 'NOMINAL', cpu: 0 }
+          [serviceId]: { ...prev[serviceId], status: '正常稼働', cpu: 0 }
         }));
-        addLog(`SECURE_EXEC: ${serviceId.toUpperCase()} を再起動しました。`, 'sec');
-        return "SUCCESS";
+        addLog(`実行: ${services[serviceId].name} の再起動プロトコル完了。`, 'sec');
+        return "成功";
       }
     }
     if (name === "optimize_all") {
       setServices(prev => {
         const next = { ...prev };
         Object.keys(next).forEach(k => {
-          next[k].cpu = Math.max(5, Math.floor(next[k].cpu * 0.4));
+          next[k].cpu = Math.max(5, Math.floor(next[k].cpu * 0.3));
         });
         return next;
       });
-      addLog("SECURE_EXEC: 全システムのリソースを最適化しました。", 'sec');
-      return "SUCCESS";
+      addLog("実行: 全システムのリソース最適化が完了しました。", 'sec');
+      return "成功";
     }
-    return "UNKNOWN_COMMAND";
+    return "不明なコマンド";
   }, [services, addLog]);
 
-  // --- Gemini API Gateway ---
+  // --- Gemini API 連携 ---
   const sendToGemini = async (text?: string) => {
     const messageToSend = text || inputMessage;
     if (!messageToSend || isThinking) return;
 
     setIsThinking(true);
-    addLog(`USER: ${messageToSend}`, 'sys');
+    addLog(`あなた: ${messageToSend}`, 'sys');
     setInputMessage('');
 
     try {
@@ -92,18 +92,44 @@ export default function LaruNexusUltimate() {
         for (const call of data.functionCalls) {
           executeLocalTool(call.name, call.args);
         }
-        addLog("GEMINI: コマンドを解釈し、システム操作を実行しました。", "gem");
+        addLog("Gemini: システムを修復しました。", "gem");
       } else if (data.text) {
-        addLog(`GEMINI: ${data.text}`, 'gem');
+        addLog(`Gemini: ${data.text}`, 'gem');
       }
     } catch (error) {
-      addLog("CRITICAL: 通信エラーが発生しました。", "sec");
+      addLog("警告: 通信エラーが発生しました。", "sec");
     } finally {
       setIsThinking(false);
     }
   };
 
-  // --- Real-time Visual Simulation ---
+  // --- 音声認識 (Speech-to-Text) ---
+  const startListening = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      addLog("エラー: お使いのブラウザは音声認識に対応していません。", "sec");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'ja-JP';
+    recognition.start();
+    setIsLive(true);
+    addLog("マイク起動: お話しください...", "sys");
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      sendToGemini(transcript);
+      setIsLive(false);
+    };
+
+    recognition.onerror = () => {
+      setIsLive(false);
+      addLog("エラー: 音声が聞き取れませんでした。", "sec");
+    };
+  };
+
+  // リアルタイム演出
   useEffect(() => {
     const interval = setInterval(() => {
       if (isLive) setAudioLevel(Math.random() * 100);
@@ -120,15 +146,7 @@ export default function LaruNexusUltimate() {
   }, [isLive]);
 
   return (
-    <div className="nexus-fortress" style={{ 
-      height: '100vh', 
-      display: 'flex', 
-      flexDirection: 'column', 
-      backgroundColor: '#000', 
-      color: '#fff',
-      position: 'relative',
-      overflow: 'hidden'
-    }}>
+    <div className="nexus-fortress" style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#000', color: '#fff', position: 'relative', overflow: 'hidden' }}>
       <style dangerouslySetInnerHTML={{ __html: `
         .grid-overlay {
           position: fixed; inset: 0;
@@ -136,104 +154,98 @@ export default function LaruNexusUltimate() {
           background-size: 30px 30px; pointer-events: none; z-index: 0;
         }
         @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes alert-pulse { 0%, 100% { border-color: rgba(255,0,64,0.3); } 50% { border-color: rgba(255,0,64,0.8); background: rgba(255,0,64,0.05); } }
+        .alert-active { animation: alert-pulse 1s infinite; }
         .mobile-only { display: none; }
-        .desktop-flex { display: flex; }
         @media (max-width: 768px) {
-          .desktop-flex { display: none; }
-          .mobile-only { display: flex; }
-          .mobile-content { display: none; }
-          .mobile-content.active { display: flex; flex-direction: column; flex: 1; overflow-y: auto; }
+          .desktop-flex { display: none !important; }
+          .mobile-only { display: flex !important; }
+          .section-content { display: none !important; }
+          .section-content.active { display: flex !important; flex-direction: column; flex: 1; overflow-y: auto; }
         }
       `}} />
       <div className="grid-overlay" />
 
-      {/* --- Header --- */}
-      <header style={{ 
-        height: '60px', borderBottom: '1px solid rgba(0,242,255,0.3)', 
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
-        padding: '0 20px', background: 'rgba(0,0,0,0.9)', zIndex: 1100, backdropFilter: 'blur(10px)'
-      }}>
+      {/* ヘッダー */}
+      <header style={{ height: '60px', borderBottom: '1px solid rgba(0,242,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', background: 'rgba(0,0,0,0.9)', zIndex: 1100 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ width: '10px', height: '10px', backgroundColor: '#00f2ff', boxShadow: '0 0 10px #00f2ff' }} />
-          <h1 style={{ fontSize: '18px', fontWeight: 900, color: '#00f2ff', letterSpacing: '2px' }}>
-            LARU NEXUS <span style={{ fontSize: '10px', color: '#444', fontWeight: 400 }}>v10.5.0-STABLE</span>
-          </h1>
+          <div style={{ width: '12px', height: '12px', backgroundColor: '#00f2ff', boxShadow: '0 0 10px #00f2ff' }} />
+          <h1 style={{ fontSize: '18px', fontWeight: 900, color: '#00f2ff', letterSpacing: '2px' }}>LARU 統合管制要塞 <span style={{ fontSize: '10px', color: '#444' }}>v11.0</span></h1>
         </div>
-        <div style={{ fontSize: '10px', color: isLive ? '#00f2ff' : '#444' }}>
-          [ NEURAL_LINK: {isLive ? 'ACTIVE' : 'STANDBY'} ]
-        </div>
+        <div style={{ fontSize: '10px', color: '#39ff14' }}>[ システム状態: 正常 ]</div>
       </header>
 
-      {/* --- Mobile Tabs --- */}
-      <nav className="mobile-only" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: '#000' }}>
-        {(['status', 'nexus', 'terminal'] as const).map(tab => (
+      {/* スマホ用タブナビ */}
+      <nav className="mobile-only" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: '#000', zIndex: 1000 }}>
+        {(['監視', 'コア', 'ログ'] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{
-            flex: 1, padding: '15px 0', fontSize: '10px', fontWeight: 'bold', border: 'none',
+            flex: 1, padding: '15px 0', fontSize: '11px', fontWeight: 'bold', border: 'none',
             background: activeTab === tab ? 'rgba(0,242,255,0.1)' : 'transparent',
             color: activeTab === tab ? '#00f2ff' : '#666',
             borderBottom: activeTab === tab ? '2px solid #00f2ff' : 'none'
           }}>
-            {tab.toUpperCase()}
+            {tab}
           </button>
         ))}
       </nav>
 
-      {/* --- Main Content --- */}
-      <div className="content-container" style={{ flex: 1, display: 'flex', position: 'relative', zIndex: 10, overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', position: 'relative', zIndex: 10, overflow: 'hidden' }}>
         
-        {/* Left: Status */}
-        <aside className={`mobile-content ${activeTab === 'status' ? 'active' : ''}`} style={{
+        {/* 左: 監視パネル */}
+        <aside className={`section-content ${activeTab === '監視' ? 'active' : ''}`} style={{
           width: '320px', borderRight: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.6)', padding: '20px'
         }}>
-          <h2 style={{ fontSize: '11px', color: '#00f2ff', marginBottom: '20px', borderBottom: '1px solid #222' }}>NODE_MONITORING</h2>
+          <h2 style={{ fontSize: '11px', color: '#00f2ff', marginBottom: '20px', borderBottom: '1px solid #222' }}>リアルタイム監視</h2>
           {Object.values(services).map(s => (
-            <div key={s.id} style={{ marginBottom: '20px', padding: '15px', border: '1px solid #222', background: 'rgba(255,255,255,0.02)' }}>
+            <div key={s.id} className={s.status === '高負荷' ? 'alert-active' : ''} style={{ marginBottom: '20px', padding: '15px', border: '1px solid #222', background: 'rgba(255,255,255,0.02)', transition: '0.3s' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ color: s.color, fontWeight: 'bold', fontSize: '12px' }}>{s.name}</span>
-                <span style={{ fontSize: '10px', color: '#888' }}>{s.status}</span>
+                <span style={{ fontSize: '10px', color: s.status === '高負荷' ? '#ff0040' : '#888' }}>{s.status}</span>
               </div>
               <div style={{ height: '4px', background: '#111', marginBottom: '10px' }}>
                 <div style={{ width: `${s.cpu}%`, height: '100%', backgroundColor: s.color, boxShadow: `0 0 10px ${s.color}`, transition: 'width 0.5s' }} />
               </div>
-              <div style={{ display: 'flex', gap: '5px' }}>
-                <button onClick={() => sendToGemini(`${s.name}を再起動`)} style={{ flex: 1, fontSize: '9px', padding: '5px', background: 'none', border: '1px solid #333', color: '#666' }}>RESTART</button>
-                <button onClick={() => sendToGemini(`${s.name}を最適化`)} style={{ flex: 1, fontSize: '9px', padding: '5px', background: 'none', border: '1px solid #333', color: '#666' }}>OPTIMIZE</button>
-              </div>
+              <div style={{ fontSize: '9px', color: '#666' }}>{s.description}</div>
             </div>
           ))}
         </aside>
 
-        {/* Center: Nexus */}
-        <main className={`mobile-content ${activeTab === 'nexus' ? 'active' : ''}`} style={{
+        {/* 中央: ネクサスコア */}
+        <main className={`section-content ${activeTab === 'コア' ? 'active' : ''}`} style={{
           flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
         }}>
-          <div style={{ position: 'relative', width: '280px', height: '280px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'relative', width: '260px', height: '260px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ 
               position: 'absolute', inset: 0, borderRadius: '50%', border: '2px solid #00f2ff',
-              opacity: isLive ? 0.4 : 0.1, transform: `scale(${1 + audioLevel / 150})`, transition: 'transform 0.1s'
+              opacity: isLive ? 0.6 : 0.1, transform: `scale(${1 + audioLevel / 100})`, transition: '0.1s'
             }} />
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '40px', fontWeight: 900, color: '#fff', textShadow: '0 0 20px #00f2ff' }}>LARU</div>
-              <div style={{ fontSize: '10px', color: '#00f2ff', letterSpacing: '5px', marginTop: '5px' }}>NEXUS CORE</div>
+              <div style={{ fontSize: '42px', fontWeight: 900, color: '#fff', textShadow: '0 0 20px #00f2ff' }}>LARU</div>
+              <div style={{ fontSize: '10px', color: '#00f2ff', letterSpacing: '5px' }}>NEXUS CORE</div>
             </div>
           </div>
-          <button onClick={() => setIsLive(!isLive)} style={{
-            marginTop: '50px', padding: '15px 40px', background: isLive ? 'rgba(255,0,64,0.1)' : 'rgba(0,242,255,0.05)',
-            border: `2px solid ${isLive ? '#ff0040' : '#00f2ff'}`, color: isLive ? '#ff0040' : '#00f2ff',
-            fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.3s'
-          }}>
-            {isLive ? 'TERMINATE_LINK' : 'INITIATE_LINK'}
-          </button>
+
+          <div style={{ marginTop: '50px', display: 'flex', flexDirection: 'column', gap: '15px', width: '80%', maxWidth: '300px' }}>
+            <button onClick={startListening} style={{
+              padding: '18px', background: isLive ? 'rgba(255,0,64,0.2)' : 'rgba(0,242,255,0.1)',
+              border: `2px solid ${isLive ? '#ff0040' : '#00f2ff'}`, color: isLive ? '#ff0040' : '#00f2ff',
+              fontWeight: 'bold', cursor: 'pointer', borderRadius: '4px'
+            }}>
+              {isLive ? '聞き取り中...' : '音声コマンドを起動'}
+            </button>
+            <div style={{ fontSize: '10px', color: '#444', textAlign: 'center' }}>
+              例: 「ラルボットを再起動して」「システムを最適化」
+            </div>
+          </div>
         </main>
 
-        {/* Right: Terminal */}
-        <section className={`mobile-content ${activeTab === 'terminal' ? 'active' : ''}`} style={{
+        {/* 右: ターミナルログ */}
+        <section className={`section-content ${activeTab === 'ログ' ? 'active' : ''}`} style={{
           width: '380px', borderLeft: '1px solid rgba(255,255,255,0.1)', background: 'rgba(5,5,5,0.95)', display: 'flex', flexDirection: 'column'
         }}>
-          <div style={{ padding: '15px', borderBottom: '1px solid #222', fontSize: '10px', color: '#666' }}>TERMINAL_LOG</div>
+          <div style={{ padding: '15px', borderBottom: '1px solid #222', fontSize: '10px', color: '#666' }}>実行ログ・ストリーム</div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column-reverse', gap: '10px' }}>
-            {isThinking && <div style={{ color: '#00f2ff', fontSize: '10px', animation: 'pulse 1s infinite' }}>THINKING...</div>}
+            {isThinking && <div style={{ color: '#00f2ff', fontSize: '10px' }}>Geminiが思考中...</div>}
             {logs.map(log => (
               <div key={log.id} style={{ fontSize: '11px', display: 'flex', gap: '10px' }}>
                 <span style={{ color: '#444' }}>[{log.time}]</span>
@@ -247,17 +259,16 @@ export default function LaruNexusUltimate() {
               value={inputMessage}
               onChange={e => setInputMessage(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && sendToGemini()}
-              placeholder="COMMAND..."
-              style={{ width: '100%', background: 'none', border: 'none', borderBottom: '1px solid #333', color: '#39ff14', padding: '5px', fontSize: '12px', outline: 'none' }}
+              placeholder="コマンドを入力..."
+              style={{ width: '100%', background: 'none', border: 'none', borderBottom: '1px solid #333', color: '#39ff14', padding: '5px', fontSize: '13px', outline: 'none' }}
             />
           </div>
         </section>
       </div>
 
-      {/* --- Desktop Media Queries (CSS override) --- */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media (min-width: 769px) {
-          .mobile-content { display: flex !important; }
+          .section-content { display: flex !important; }
           .mobile-only { display: none !important; }
         }
       `}} />
