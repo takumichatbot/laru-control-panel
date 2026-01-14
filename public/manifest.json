@@ -5,7 +5,7 @@
   "theme_color": "#00FFFF",
   "background_color": "#000000",
   "display": "fullscreen",
-  "display_override": ["fullscreen", "standalone"],
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
   "orientation": "portrait",
   "scope": "/",
   "start_url": "/",
