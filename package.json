@@ -10,6 +10,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@tailwindcss/postcss": "^4.1.18",
     "next": "^15.0.0",
     "next-auth": "^5.0.0-beta.11",

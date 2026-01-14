@@ -20,7 +20,6 @@ body {
   overflow: hidden;
 }
 
-/* 究極の走査線エフェクト */
 .nexus-fortress::before {
   content: "";
   position: fixed;
@@ -34,7 +33,6 @@ body {
   opacity: 0.4;
 }
 
-/* グリッド背景の動的パルス */
 .grid-overlay {
   position: fixed;
   inset: 0;
@@ -51,7 +49,6 @@ body {
   50% { opacity: 0.8; transform: scale(1.02); }
 }
 
-/* ユニット・ステータスバー */
 .progress-container {
   height: 4px;
   background: rgba(255, 255, 255, 0.05);
@@ -66,7 +63,6 @@ body {
   box-shadow: 0 0 10px currentColor;
 }
 
-/* ターミナルラインのタイプ演出 */
 .log-entry {
   border-left: 2px solid transparent;
   padding-left: 10px;
@@ -84,8 +80,9 @@ body {
 .type-gem { border-left-color: var(--neon-cyan); color: #fff; }
 .type-sec { border-left-color: var(--danger); color: var(--danger); font-weight: bold; }
 
-/* モバイル対応の高度な定義 */
 @media (max-width: 1024px) {
   .desktop-layout { display: none; }
   .mobile-layout { display: flex; flex-direction: column; height: 100vh; }
 }
+
+@keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

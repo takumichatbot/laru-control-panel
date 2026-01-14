@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 
-// 型定義
+// --- Types ---
 interface ServiceData {
   id: string;
   name: string;
@@ -19,8 +19,7 @@ interface LogEntry {
   time: string;
 }
 
-export default function LaruNexusPro() {
-  // 状態管理
+export default function LaruNexusSecure() {
   const [isLive, setIsLive] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -31,170 +30,132 @@ export default function LaruNexusPro() {
     flastal: { id: 'flastal', name: 'FLASTAL.COM', cpu: 32, mem: 1250, status: 'BUSY', color: '#ff006e' }
   });
 
-  // ログ追加関数
   const addLog = useCallback((msg: string, type: 'sys' | 'gem' | 'sec' = 'sys') => {
     const time = new Date().toLocaleTimeString('ja-JP', { hour12: false });
     const id = Math.random().toString(36).substr(2, 9);
     setLogs(prev => [{ id, msg, type, time }, ...prev.slice(0, 40)]);
   }, []);
 
-  // Geminiの思考プロセスシミュレーター
-  const executeCommand = useCallback(async (input: string) => {
-    setIsThinking(true);
-    addLog(`USER_INPUT: ${input}`, 'sys');
-    
-    const steps = [
-      { msg: 'NEXUS NEURAL SCAN INITIALIZED...', delay: 500 },
-      { msg: 'ANALYZING INFRASTRUCTURE VULNERABILITIES...', delay: 800 },
-      { msg: 'SYNCING WITH GEMINI LIVE ENGINE...', delay: 600 },
-      { msg: `ADVISORY: ${input} に関するプロトコルを実行しました。全システム正常です。`, type: 'gem', delay: 400 }
-    ];
-
-    for (const step of steps) {
-      await new Promise(r => setTimeout(r, step.delay));
-      addLog(step.msg, (step.type as any) || 'sys');
+  // --- 実際の状態を操作する関数 ---
+  const executeLocalTool = (name: string, args: any) => {
+    if (name === "restart_service") {
+      const { serviceId } = args;
+      setServices(prev => ({
+        ...prev,
+        [serviceId]: { ...prev[serviceId], status: 'NOMINAL', cpu: 0 }
+      }));
+      addLog(`SYSTEM_ACTION: ${serviceId} を再起動しました。`, 'sec');
+      return "完了しました。";
     }
-    setIsThinking(false);
-  }, [addLog]);
+    if (name === "optimize_all") {
+      setServices(prev => {
+        const next = { ...prev };
+        Object.keys(next).forEach(k => { next[k].cpu = Math.max(5, next[k].cpu - 15); });
+        return next;
+      });
+      addLog("SYSTEM_ACTION: 全システムを最適化しました。", 'sec');
+      return "完了しました。";
+    }
+    return "未知のコマンドです。";
+  };
 
-  // 音声レベル・リソースの動的シミュレーション
+  // --- バックエンドAPI経由でGeminiを実行 ---
+  const sendToGemini = async (userInput: string) => {
+    setIsThinking(true);
+    addLog(`USER: ${userInput}`, 'sys');
+
+    try {
+      const res = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userInput })
+      });
+
+      const data = await res.json();
+
+      if (data.functionCalls) {
+        // 関数呼び出しが必要な場合、ローカルで実行
+        for (const call of data.functionCalls) {
+          executeLocalTool(call.name, call.args);
+        }
+        addLog("GEMINI: コマンドを実行し、システムの状態を更新しました。", "gem");
+      } else {
+        addLog(`GEMINI: ${data.text}`, 'gem');
+      }
+    } catch (error) {
+      addLog("ERROR: バックエンド通信に失敗しました。", "sec");
+    } finally {
+      setIsThinking(false);
+    }
+  };
+
+  // シミュレーション
   useEffect(() => {
     const interval = setInterval(() => {
       if (isLive) setAudioLevel(Math.random() * 100);
       setServices(prev => {
         const next = { ...prev };
         Object.keys(next).forEach(key => {
-          next[key].cpu = Math.max(5, Math.min(95, next[key].cpu + (Math.random() * 10 - 5)));
+          next[key].cpu = Math.max(5, Math.min(95, next[key].cpu + (Math.random() * 4 - 2)));
         });
         return next;
       });
-    }, 150);
+    }, 200);
     return () => clearInterval(interval);
   }, [isLive]);
 
   return (
     <div className="nexus-fortress" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <div className="grid-overlay" />
-
-      {/* ヘッダー: システム情報 */}
-      <header style={{ 
-        height: '60px', borderBottom: '1px solid rgba(0,242,255,0.2)', 
-        display: 'flex', alignItems: 'center', padding: '0 25px', 
-        background: 'rgba(0,0,0,0.9)', zIndex: 1100 
-      }}>
-        <div style={{ flex: 1 }}>
-          <h1 style={{ fontSize: '18px', fontWeight: 900, color: 'var(--neon-cyan)', letterSpacing: '2px' }}>
-            LARU NEXUS COMMAND <span style={{ fontSize: '10px', color: '#666' }}>v6.2.0-PRO</span>
-          </h1>
-        </div>
-        <div style={{ display: 'flex', gap: '20px', fontSize: '11px', fontFamily: 'JetBrains Mono' }}>
-          <div style={{ color: '#39ff14' }}>[ UPTIME: 1,244H ]</div>
-          <div style={{ color: isLive ? 'var(--neon-cyan)' : '#444' }}>[ GEMINI_LIVE: {isLive ? 'CONNECTED' : 'STANDBY'} ]</div>
-        </div>
+      <header style={{ height: '60px', borderBottom: '1px solid rgba(0,242,255,0.2)', display: 'flex', alignItems: 'center', padding: '0 25px', background: 'rgba(0,0,0,0.9)', zIndex: 1100 }}>
+        <h1 style={{ fontSize: '18px', fontWeight: 900, color: 'var(--neon-cyan)', letterSpacing: '2px' }}>LARU COMMAND <span style={{ fontSize: '10px', color: '#666' }}>v9.0-SECURE</span></h1>
       </header>
 
-      {/* メインレイアウト */}
       <div className="desktop-layout" style={{ flex: 1, display: 'grid', gridTemplateColumns: '340px 1fr 400px', overflow: 'hidden' }}>
-        
-        {/* 左カラム: 高度なサービスモニタリング */}
-        <aside style={{ borderRight: '1px solid rgba(255,255,255,0.1)', padding: '20px', background: 'rgba(0,0,0,0.6)', overflowY: 'auto' }}>
-          <h2 style={{ fontSize: '12px', color: 'var(--neon-cyan)', marginBottom: '20px', borderBottom: '1px solid #222', paddingBottom: '10px' }}>
-            SYSTEM_RESOURCES
-          </h2>
+        <aside style={{ borderRight: '1px solid rgba(255,255,255,0.1)', padding: '20px', background: 'rgba(0,0,0,0.6)' }}>
+          <h2 style={{ fontSize: '11px', color: 'var(--neon-cyan)', marginBottom: '20px' }}>SECURE_NODES</h2>
           {Object.values(services).map(s => (
-            <div key={s.id} style={{ marginBottom: '25px', padding: '15px', background: 'rgba(255,255,255,0.02)', border: '1px solid #222' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                <span style={{ fontWeight: 'bold', fontSize: '13px', color: s.color }}>{s.name}</span>
-                <span style={{ fontSize: '10px', color: s.status === 'ERROR' ? 'var(--danger)' : '#888' }}>{s.status}</span>
+            <div key={s.id} style={{ marginBottom: '25px', padding: '15px', border: '1px solid #222' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ fontWeight: 'bold', fontSize: '12px', color: s.color }}>{s.name}</span>
               </div>
-              <div style={{ fontSize: '10px', color: '#aaa', marginBottom: '5px' }}>CPU UTILIZATION: {s.cpu.toFixed(1)}%</div>
-              <div className="progress-container">
-                <div className="progress-fill" style={{ width: `${s.cpu}%`, backgroundColor: s.color, color: s.color }} />
-              </div>
-              <div style={{ display: 'flex', gap: '8px', marginTop: '15px' }}>
-                <button onClick={() => addLog(`SCALING ${s.name} RESOURCES...`, 'sys')} style={{ flex: 1, background: 'none', border: '1px solid #333', color: '#666', fontSize: '9px', padding: '5px', cursor: 'pointer' }}>SCALE</button>
-                <button onClick={() => addLog(`FLUSHING ${s.name} LOGS...`, 'sys')} style={{ flex: 1, background: 'none', border: '1px solid #333', color: '#666', fontSize: '9px', padding: '5px', cursor: 'pointer' }}>FLUSH</button>
-              </div>
+              <div className="progress-container"><div className="progress-fill" style={{ width: `${s.cpu}%`, backgroundColor: s.color }} /></div>
             </div>
           ))}
         </aside>
 
-        {/* 中央: Gemini Live スペクトラム・ハブ */}
         <main style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="visualizer-container" style={{ position: 'relative', width: '350px', height: '350px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {/* 動的オーラ波形 */}
-            <div style={{ 
-              position: 'absolute', inset: 0, borderRadius: '50%', 
-              border: '2px solid var(--neon-cyan)', opacity: 0.2,
-              transform: `scale(${1 + audioLevel/150})`,
-              boxShadow: isLive ? `0 0 ${audioLevel}px var(--neon-cyan)` : 'none',
-              transition: 'transform 0.1s ease-out'
-            }} />
-            <div className="hub-core" style={{ textAlign: 'center', zIndex: 10 }}>
-              <div style={{ fontSize: '32px', fontWeight: 900, color: '#fff', textShadow: '0 0 20px var(--neon-cyan)' }}>LARU</div>
-              <div style={{ fontSize: '12px', color: 'var(--neon-cyan)', letterSpacing: '5px', marginTop: '5px' }}>NEXUS CORE</div>
-            </div>
-            {/* 回転リング群 */}
-            <div className="rotating-ring" style={{ position: 'absolute', width: '280px', height: '280px', border: '1px dashed rgba(0,242,255,0.2)', borderRadius: '50%', animation: 'rotate 20s linear infinite' }} />
+          <div style={{ position: 'relative', width: '250px', height: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '2px solid var(--neon-cyan)', transform: `scale(${1 + audioLevel/150})`, opacity: 0.3 }} />
+            <div style={{ fontSize: '24px', fontWeight: 900, color: '#fff' }}>LARU</div>
           </div>
-
-          <div style={{ marginTop: '50px', display: 'flex', gap: '20px' }}>
-            <button 
-              onClick={() => {
-                setIsLive(!isLive);
-                addLog(isLive ? 'GEMINI_LIVE DISCONNECTED' : 'GEMINI_LIVE CONNECTED', 'gem');
-              }}
-              style={{
-                padding: '15px 40px', background: isLive ? 'rgba(255,0,64,0.2)' : 'rgba(0,242,255,0.1)',
-                border: `1px solid ${isLive ? 'var(--danger)' : 'var(--neon-cyan)'}`,
-                color: isLive ? 'var(--danger)' : 'var(--neon-cyan)',
-                fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.3s'
-              }}
-            >
-              {isLive ? 'TERMINATE LIVE' : 'INITIATE GEMINI LIVE'}
-            </button>
-          </div>
+          <button onClick={() => setIsLive(!isLive)} style={{ marginTop: '40px', padding: '10px 30px', background: 'none', border: '1px solid var(--neon-cyan)', color: 'var(--neon-cyan)', cursor: 'pointer' }}>
+            {isLive ? 'TERMINATE' : 'INITIATE'}
+          </button>
         </main>
 
-        {/* 右カラム: インテリジェント・ターミナル */}
-        <section className="terminal-column" style={{ display: 'flex', flexDirection: 'column', background: 'var(--terminal-bg)', borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
-          <div style={{ padding: '15px 20px', borderBottom: '1px solid #222', fontSize: '11px', color: '#666', fontWeight: 'bold' }}>
-            TERMINAL_INTERFACE_STREAMS
-          </div>
+        <section style={{ display: 'flex', flexDirection: 'column', background: 'var(--terminal-bg)', borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
           <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column-reverse' }}>
-            {isThinking && <div className="log-entry type-gem">NEURAL_THINKING...</div>}
+            {isThinking && <div className="log-entry type-gem">SECURE_QUERYING...</div>}
             {logs.map(log => (
               <div key={log.id} className={`log-entry type-${log.type}`}>
                 <span style={{ color: '#444', marginRight: '8px' }}>[{log.time}]</span>
-                <span style={{ color: log.type === 'gem' ? 'var(--neon-cyan)' : 'inherit' }}>{log.msg}</span>
+                <span>{log.msg}</span>
               </div>
             ))}
           </div>
           <div style={{ padding: '20px', borderTop: '1px solid #222' }}>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <span style={{ color: 'var(--neon-cyan)' }}>&gt;</span>
-              <input 
-                type="text" 
-                placeholder="EXECUTE PROTOCOL..." 
-                style={{ background: 'none', border: 'none', color: 'var(--neon-green)', outline: 'none', flex: 1, fontFamily: 'inherit', fontSize: '12px' }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const input = (e.target as HTMLInputElement).value;
-                    if (input) {
-                      executeCommand(input);
-                      (e.target as HTMLInputElement).value = '';
-                    }
-                  }
-                }}
-              />
-            </div>
+            <input type="text" placeholder="SECURE COMMAND..." style={{ background: 'none', border: 'none', color: 'var(--neon-green)', width: '100%', outline: 'none' }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const val = (e.target as HTMLInputElement).value;
+                  if (val) { sendToGemini(val); (e.target as HTMLInputElement).value = ''; }
+                }
+              }}
+            />
           </div>
         </section>
       </div>
-
-      <style jsx>{`
-        @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      `}</style>
     </div>
   );
 }

@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'LARU Nexus Command PRO',
-  description: 'Integrated AI Infrastructure Management Interface',
+  title: 'LARU Nexus Command v7',
+  description: 'AI Autonomous Management Fortress',
 };
 
 export const viewport: Viewport = {
@@ -22,7 +22,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja">
-      <body className="antialiased" style={{ backgroundColor: '#000' }}>
+      <body style={{ backgroundColor: '#000' }}>
         {children}
       </body>
     </html>
