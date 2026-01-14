@@ -19,7 +19,11 @@ interface LogEntry {
   time: string;
 }
 
-export default function LaruNexusV14() {
+/**
+ * LARU NEXUS v15.0 - THE COMMANDER CORE
+ * SF的世界観と実用的なシステム管理を融合させた最終形態
+ */
+export default function LaruNexusV15() {
   const [activeTab, setActiveTab] = useState<'MONITOR' | 'CORE' | 'LOG'>('CORE');
   const [isLive, setIsLive] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
@@ -28,16 +32,19 @@ export default function LaruNexusV14() {
   const [inputMessage, setInputMessage] = useState('');
   const [isAlert, setIsAlert] = useState(false);
 
+  // システム資産の定義
   const [services, setServices] = useState<Record<string, ServiceData>>({
-    larubot: { id: 'larubot', name: 'LARUBOT AI', cpu: 15, mem: 420, status: 'NOMINAL', color: '#00f2ff' },
-    laruvisona: { id: 'laruvisona', name: 'LARUVISONA', cpu: 10, mem: 180, status: 'NOMINAL', color: '#39ff14' },
-    flastal: { id: 'flastal', name: 'FLASTAL.COM', cpu: 45, mem: 1250, status: 'HEAVY', color: '#ff006e' }
+    larubot: { id: 'larubot', name: 'LARUBOT-AI', cpu: 12, mem: 410, status: 'NOMINAL', color: '#00f2ff' },
+    laruvisona: { id: 'laruvisona', name: 'LARUVISONA', cpu: 8, mem: 175, status: 'NOMINAL', color: '#39ff14' },
+    flastal: { id: 'flastal', name: 'FLASTAL.NET', cpu: 42, mem: 1100, status: 'HEAVY', color: '#ff006e' }
   });
+
+  const logEndRef = useRef<HTMLDivElement>(null);
 
   const addLog = useCallback((msg: string, type: 'sys' | 'gem' | 'sec' = 'sys') => {
     const time = new Date().toLocaleTimeString('ja-JP', { hour12: false });
     const id = Math.random().toString(36).substr(2, 9);
-    setLogs(prev => [{ id, msg, type, time }, ...prev.slice(0, 50)]);
+    setLogs(prev => [{ id, msg, type, time }, ...prev.slice(0, 100)]);
   }, []);
 
   // --- Gemini 実行プロトコル ---
@@ -46,7 +53,7 @@ export default function LaruNexusV14() {
     if (!messageToSend || isThinking) return;
 
     setIsThinking(true);
-    addLog(`あなた: ${messageToSend}`, 'sys');
+    addLog(`CMD >> ${messageToSend}`, 'sys');
     setInputMessage('');
 
     try {
@@ -56,7 +63,7 @@ export default function LaruNexusV14() {
         body: JSON.stringify({ message: messageToSend })
       });
 
-      if (!res.ok) throw new Error(`接続エラー: ${res.status}`);
+      if (!res.ok) throw new Error(`ERR_CONN_FAILED: ${res.status}`);
 
       const data = await res.json();
 
@@ -65,39 +72,32 @@ export default function LaruNexusV14() {
           if (call.name === "restart_service") {
             const sid = call.args.serviceId;
             setServices(prev => ({ ...prev, [sid]: { ...prev[sid], status: 'NOMINAL', cpu: 0 } }));
-            addLog(`実行完了: ${sid.toUpperCase()} の再起動に成功しました。`, 'sec');
-          }
-          if (call.name === "optimize_all") {
-            setServices(prev => {
-              const n = { ...prev };
-              Object.keys(n).forEach(k => n[k].cpu = 12);
-              return n;
-            });
-            addLog("実行完了: 全システムの最適化が完了しました。", 'sec');
+            addLog(`RESTORE: ${sid.toUpperCase()} サービスを再起動しました。`, 'sec');
           }
         });
-        addLog("Gemini: 命令に基づきシステムを調整しました。", "gem");
+        addLog("NEXUS: 外部命令を処理し、プロトコルを更新しました。", "gem");
       } else if (data.text) {
-        addLog(`Gemini: ${data.text}`, 'gem');
+        addLog(`NEXUS: ${data.text}`, 'gem');
       }
     } catch (error: any) {
-      addLog(`通信エラー: ${error.message}`, "sec");
-      addLog("解決策: Renderの環境変数(GEMINI_API_KEY)が正しいか確認してください。", "sys");
+      addLog(`ERR_AUTH: 通信プロトコルが遮断されました。`, "sec");
+      addLog(`INFO: 環境変数を確認してください。`, "sys");
     } finally {
       setIsThinking(false);
     }
   };
 
-  // --- 音声認識プロトコル ---
+  // --- 高精度音声認識プロトコル ---
   const startListening = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return addLog("エラー: ブラウザが音声認識に対応していません。", "sec");
+    if (!SpeechRecognition) return addLog("ERR: 音声認識モジュールが未搭載です。", "sec");
 
     const recognition = new SpeechRecognition();
     recognition.lang = 'ja-JP';
+    recognition.interimResults = false;
     recognition.start();
     setIsLive(true);
-    addLog("音声認識中: 指示をどうぞ...", "sys");
+    addLog("LISTENING: 指示をお待ちしています...", "sys");
 
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
@@ -106,11 +106,11 @@ export default function LaruNexusV14() {
     };
     recognition.onerror = () => {
       setIsLive(false);
-      addLog("エラー: 音声が聞き取れませんでした。", "sec");
+      addLog("ERR: 音声情報のデコードに失敗しました。", "sec");
     };
   };
 
-  // リアルタイム・テレメトリ更新
+  // テレメトリ自動更新
   useEffect(() => {
     const interval = setInterval(() => {
       if (isLive) setAudioLevel(Math.random() * 100);
@@ -118,139 +118,241 @@ export default function LaruNexusV14() {
         const next = { ...prev };
         let anyCritical = false;
         Object.keys(next).forEach(key => {
-          const drift = Math.random() * 6 - 3;
-          next[key].cpu = Math.max(2, Math.min(98, next[key].cpu + drift));
+          const drift = Math.random() * 4 - 2;
+          next[key].cpu = Math.max(5, Math.min(99, next[key].cpu + drift));
           if (next[key].cpu > 90) anyCritical = true;
         });
         setIsAlert(anyCritical);
         return next;
       });
-    }, 150);
+    }, 200);
     return () => clearInterval(interval);
   }, [isLive]);
 
   return (
-    <div className={`nexus-fortress ${isAlert ? 'alert-mode' : ''}`} style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#000', color: '#fff', position: 'relative', overflow: 'hidden' }}>
+    <div className={`nexus-container ${isAlert ? 'alert-active' : ''}`}>
       <style dangerouslySetInnerHTML={{ __html: `
-        .grid-overlay {
-          position: fixed; inset: 0;
-          background-image: linear-gradient(rgba(0,242,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,242,255,0.05) 1px, transparent 1px);
-          background-size: 30px 30px; pointer-events: none; z-index: 0;
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+        
+        :root {
+          --neon-blue: #00f2ff;
+          --neon-red: #ff0040;
+          --neon-green: #39ff14;
+          --bg-dark: #050505;
         }
-        @keyframes alert-pulse { 0% { background: rgba(255,0,0,0); } 50% { background: rgba(255,0,0,0.15); } 100% { background: rgba(255,0,0,0); } }
-        .alert-mode::after { content: ""; position: fixed; inset: 0; animation: alert-pulse 1s infinite; z-index: 1000; pointer-events: none; border: 4px solid #ff0040; }
-        @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .mobile-only { display: none; }
-        @media (max-width: 768px) {
-          .desktop-flex { display: none !important; }
-          .mobile-only { display: flex !important; }
-          .section-content { display: none !important; }
-          .section-content.active { display: flex !important; flex-direction: column; flex: 1; overflow-y: auto; }
-        }
-      `}} />
-      <div className="grid-overlay" />
 
-      {/* ヘッダー */}
-      <header style={{ height: '60px', borderBottom: '1px solid rgba(0,242,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 25px', background: 'rgba(0,0,0,0.95)', zIndex: 1100 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <div style={{ width: '12px', height: '12px', backgroundColor: isAlert ? '#ff0040' : '#00f2ff', boxShadow: `0 0 15px ${isAlert ? '#ff0040' : '#00f2ff'}`, transition: '0.3s' }} />
-          <h1 style={{ fontSize: '18px', fontWeight: 900, color: '#00f2ff', letterSpacing: '2px' }}>LARU NEXUS COMMAND <span style={{ fontSize: '10px', color: '#444' }}>v14.0</span></h1>
+        .nexus-container {
+          height: 100vh;
+          background: var(--bg-dark);
+          color: #fff;
+          font-family: 'JetBrains Mono', monospace;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          position: relative;
+        }
+
+        /* 走査線エフェクト */
+        .nexus-container::before {
+          content: " ";
+          position: absolute; inset: 0;
+          background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+                      linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+          background-size: 100% 4px, 3px 100%;
+          pointer-events: none; z-index: 100;
+        }
+
+        /* グリッド背景 */
+        .grid-bg {
+          position: fixed; inset: 0;
+          background-image: 
+            linear-gradient(rgba(0, 242, 255, 0.03) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 242, 255, 0.03) 1px, transparent 1px);
+          background-size: 50px 50px;
+          z-index: 0;
+        }
+
+        /* アラートモード */
+        @keyframes pulse-red {
+          0% { box-shadow: inset 0 0 50px rgba(255,0,64,0); border: 2px solid transparent; }
+          50% { box-shadow: inset 0 0 100px rgba(255,0,64,0.3); border: 2px solid var(--neon-red); }
+          100% { box-shadow: inset 0 0 50px rgba(255,0,64,0); border: 2px solid transparent; }
+        }
+        .alert-active { animation: pulse-red 1.5s infinite; }
+
+        .nexus-header {
+          height: 64px;
+          border-bottom: 1px solid rgba(0, 242, 255, 0.2);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0 24px;
+          background: rgba(0, 0, 0, 0.8);
+          backdrop-filter: blur(10px);
+          z-index: 200;
+        }
+
+        .nexus-main {
+          flex: 1;
+          display: flex;
+          z-index: 10;
+        }
+
+        /* レスポンシブ設計 */
+        @media (max-width: 1024px) {
+          .side-panel { display: none; }
+          .side-panel.active { display: flex; position: absolute; inset: 0; width: 100%; z-index: 300; background: var(--bg-dark); }
+        }
+
+        .card {
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          backdrop-filter: blur(5px);
+          padding: 20px;
+          transition: 0.3s;
+        }
+        .card:hover { border-color: var(--neon-blue); background: rgba(0, 242, 255, 0.05); }
+
+        .nexus-btn {
+          background: transparent;
+          border: 1px solid var(--neon-blue);
+          color: var(--neon-blue);
+          padding: 10px 20px;
+          font-weight: bold;
+          cursor: pointer;
+          text-transform: uppercase;
+          letter-spacing: 2px;
+          transition: 0.3s;
+        }
+        .nexus-btn:hover { background: var(--neon-blue); color: #000; box-shadow: 0 0 20px var(--neon-blue); }
+        .nexus-btn.listening { border-color: var(--neon-red); color: var(--neon-red); animation: blink 1s infinite; }
+
+        @keyframes blink { 50% { opacity: 0.5; } }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}} />
+      
+      <div className="grid-bg" />
+
+      {/* HEADER: 指令センター情報 */}
+      <header className="nexus-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div style={{ width: '40px', height: '40px', border: `2px solid ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: '60%', height: '60%', background: isAlert ? 'var(--neon-red)' : 'var(--neon-blue)', boxShadow: `0 0 15px ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}` }} />
+          </div>
+          <div>
+            <h1 style={{ fontSize: '16px', letterSpacing: '4px', margin: 0 }}>LARU_NEXUS_OS</h1>
+            <span style={{ fontSize: '10px', color: '#666' }}>ESTABLISHED 2025 // STATUS: {isAlert ? 'CRITICAL' : 'NOMINAL'}</span>
+          </div>
         </div>
-        <div style={{ fontSize: '11px', color: isAlert ? '#ff0040' : '#39ff14', fontFamily: 'monospace' }}>
-          [ {isAlert ? 'CRITICAL_ALERT' : 'SYSTEM_STABLE'} ]
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: '12px', color: isAlert ? 'var(--neon-red)' : 'var(--neon-green)' }}>
+            &lt; SECURITY_LEVEL_A &gt;
+          </div>
+          <div style={{ fontSize: '10px', color: '#444' }}>IP: 127.0.0.1 // PORT: 3000</div>
         </div>
       </header>
 
-      {/* モバイルナビ */}
-      <nav className="mobile-only" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: '#000', zIndex: 1000 }}>
+      {/* MOBILE NAV: レスポンシブ用 */}
+      <nav style={{ display: 'flex', background: '#000', borderBottom: '1px solid #222' }} className="lg:hidden">
         {(['MONITOR', 'CORE', 'LOG'] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{
-            flex: 1, padding: '15px 0', fontSize: '11px', fontWeight: 'bold', border: 'none',
-            background: activeTab === tab ? 'rgba(0,242,255,0.1)' : 'transparent',
-            color: activeTab === tab ? '#00f2ff' : '#666',
-            borderBottom: activeTab === tab ? '2px solid #00f2ff' : 'none'
-          }}>
-            {tab}
-          </button>
+            flex: 1, padding: '15px', border: 'none', background: 'transparent',
+            color: activeTab === tab ? 'var(--neon-blue)' : '#444',
+            borderBottom: activeTab === tab ? '2px solid var(--neon-blue)' : 'none',
+            fontSize: '11px', fontWeight: 'bold'
+          }}>{tab}</button>
         ))}
       </nav>
 
-      <div style={{ flex: 1, display: 'flex', position: 'relative', zIndex: 10, overflow: 'hidden' }}>
-        
-        {/* 左：監視モニター */}
-        <aside className={`section-content ${activeTab === 'MONITOR' ? 'active' : ''}`} style={{ width: '340px', borderRight: '1px solid rgba(0,242,255,0.2)', background: 'rgba(0,0,0,0.85)', padding: '25px' }}>
-          <h2 style={{ fontSize: '11px', color: '#00f2ff', marginBottom: '20px', letterSpacing: '1px' }}>SYSTEM_MONITOR</h2>
+      <div className="nexus-main">
+        {/* LEFT: テレメトリパネル */}
+        <aside className={`side-panel ${activeTab === 'MONITOR' ? 'active' : ''}`} style={{ width: '380px', borderRight: '1px solid rgba(255,255,255,0.1)', padding: '30px', flexDirection: 'column', gap: '20px' }}>
+          <h3 style={{ fontSize: '12px', color: 'var(--neon-blue)', borderLeft: '3px solid var(--neon-blue)', paddingLeft: '10px' }}>TELEMETRY_FEED</h3>
           {Object.values(services).map(s => (
-            <div key={s.id} style={{ marginBottom: '25px', padding: '18px', border: `1px solid ${s.cpu > 85 ? '#ff0040' : '#222'}`, background: 'rgba(255,255,255,0.02)', transition: '0.3s' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <span style={{ color: s.color, fontWeight: 'bold', fontSize: '13px' }}>{s.name}</span>
-                <span style={{ fontSize: '10px', color: s.cpu > 85 ? '#ff0040' : '#888' }}>{s.cpu > 85 ? 'ALERT' : 'NORMAL'}</span>
+            <div key={s.id} className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <span style={{ color: s.color, fontSize: '14px', fontWeight: 'bold' }}>{s.name}</span>
+                <span style={{ fontSize: '10px', color: s.cpu > 80 ? 'var(--neon-red)' : '#888' }}>CPU: {s.cpu.toFixed(1)}%</span>
               </div>
-              <div style={{ height: '4px', background: '#111', borderRadius: '2px' }}>
-                <div style={{ width: `${s.cpu}%`, height: '100%', backgroundColor: s.cpu > 85 ? '#ff0040' : s.color, boxShadow: `0 0 10px ${s.cpu > 85 ? '#ff0040' : s.color}`, transition: 'width 0.6s' }} />
+              <div style={{ height: '2px', background: '#111', overflow: 'hidden' }}>
+                <div style={{ width: `${s.cpu}%`, height: '100%', background: s.cpu > 80 ? 'var(--neon-red)' : s.color, transition: '0.5s' }} />
               </div>
-              <div style={{ display: 'flex', gap: '8px', marginTop: '15px' }}>
-                <button onClick={() => sendToGemini(`${s.name}を最適化して`)} style={{ flex: 1, background: 'none', border: '1px solid #333', color: '#888', fontSize: '9px', padding: '6px', cursor: 'pointer' }}>最適化</button>
-                <button onClick={() => sendToGemini(`${s.name}を再起動して`)} style={{ flex: 1, background: 'none', border: '1px solid #333', color: '#888', fontSize: '9px', padding: '6px', cursor: 'pointer' }}>再起動</button>
+              <div style={{ marginTop: '15px', display: 'flex', gap: '10px' }}>
+                <button onClick={() => sendToGemini(`${s.name}の最適化シーケンスを開始`)} style={{ flex: 1, fontSize: '9px', background: 'transparent', border: '1px solid #333', color: '#666', padding: '5px' }}>OPTIMIZE</button>
+                <button onClick={() => sendToGemini(`${s.name}を強制リセット`)} style={{ flex: 1, fontSize: '9px', background: 'transparent', border: '1px solid #333', color: '#666', padding: '5px' }}>REBOOT</button>
               </div>
             </div>
           ))}
         </aside>
 
-        {/* 中央：ネクサスハブ */}
-        <main className={`section-content ${activeTab === 'CORE' ? 'active' : ''}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' }}>
-          <div style={{ position: 'relative', width: '300px', height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {/* CENTER: 思考コア */}
+        <main className={`side-panel ${activeTab === 'CORE' ? 'active' : ''}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+          <div style={{ position: 'relative', width: '400px', height: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {/* ダイナミック・オーラ */}
             <div style={{ 
-              position: 'absolute', inset: 0, borderRadius: '50%', border: `2px solid ${isAlert ? '#ff0040' : '#00f2ff'}`,
-              opacity: isLive ? 0.6 : 0.1, transform: `scale(${1 + audioLevel / 120})`, transition: '0.1s ease-out'
+              position: 'absolute', inset: 0, borderRadius: '50%',
+              border: `1px solid ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}`,
+              opacity: 0.1, transform: `scale(${1.2 + audioLevel / 100})`, transition: '0.1s'
             }} />
-            <div style={{ position: 'absolute', width: '220px', height: '220px', border: `1px dashed ${isAlert ? '#ff0040' : 'rgba(0,242,255,0.2)'}`, borderRadius: '50%', animation: 'rotate 20s linear infinite' }} />
+            <div style={{ 
+              position: 'absolute', width: '320px', height: '320px',
+              border: `1px dashed ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}`,
+              borderRadius: '50%', animation: 'spin 30s linear infinite', opacity: 0.2
+            }} />
+            
             <div style={{ textAlign: 'center', zIndex: 10 }}>
-              <div style={{ fontSize: '48px', fontWeight: 900, color: '#fff', textShadow: `0 0 30px ${isAlert ? '#ff0040' : '#00f2ff'}` }}>LARU</div>
-              <div style={{ fontSize: '12px', color: isAlert ? '#ff0040' : '#00f2ff', letterSpacing: '6px', marginTop: '8px' }}>NEXUS CORE</div>
+              <div style={{ fontSize: '64px', fontWeight: 900, letterSpacing: '10px', textShadow: `0 0 40px ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}` }}>LARU</div>
+              <div style={{ fontSize: '12px', color: isAlert ? 'var(--neon-red)' : 'var(--neon-blue)', letterSpacing: '8px' }}>NEXUS_CORE_V15</div>
+              {isThinking && <div style={{ marginTop: '20px', fontSize: '10px', color: 'var(--neon-green)', animation: 'blink 0.5s infinite' }}>&gt;&gt; ANALYZING_DATA_STREAM...</div>}
             </div>
           </div>
-          <button onClick={startListening} style={{
-            marginTop: '60px', padding: '18px 50px', background: 'none',
-            border: `2px solid ${isLive ? (isAlert ? '#ff0040' : '#ff0040') : (isAlert ? '#ff0040' : '#00f2ff')}`, 
-            color: isLive ? '#ff0040' : (isAlert ? '#ff0040' : '#00f2ff'),
-            fontWeight: 'bold', cursor: 'pointer', borderRadius: '4px', letterSpacing: '2px', transition: 'all 0.3s'
-          }}>
-            {isLive ? '指示を解析中...' : 'マイクを起動（音声操作）'}
-          </button>
-        </main>
 
-        {/* 右：ターミナルログ */}
-        <section className={`section-content ${activeTab === 'LOG' ? 'active' : ''}`} style={{ width: '400px', borderLeft: '1px solid rgba(0,242,255,0.2)', background: 'rgba(5,5,5,0.98)', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ padding: '15px 20px', borderBottom: '1px solid #222', fontSize: '11px', color: '#666', fontWeight: 'bold' }}>SYSTEM_LOG_STREAM</div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column-reverse', gap: '8px' }}>
-            {isThinking && <div style={{ color: '#00f2ff', fontSize: '10px' }}>[ Gemini が思考プロトコルを実行中... ]</div>}
+          <button 
+            onClick={startListening} 
+            className={`nexus-btn ${isLive ? 'listening' : ''}`}
+            style={{ marginTop: '40px' }}
+          >
+            {isLive ? 'SYSTEM_LISTENING' : 'VOICE_COMMAND_INPUT'}
+          </button>
+        </aside>
+
+        {/* RIGHT: セキュアログ */}
+        <section className={`side-panel ${activeTab === 'LOG' ? 'active' : ''}`} style={{ width: '420px', borderLeft: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.6)', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '20px', borderBottom: '1px solid #222', fontSize: '11px', color: '#666' }}>ENCRYPTED_LOG_STREAM</div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column-reverse', gap: '12px' }}>
             {logs.map(log => (
-              <div key={log.id} style={{ fontSize: '11px', display: 'flex', gap: '12px', lineHeight: '1.5' }}>
-                <span style={{ color: '#444', flexShrink: 0 }}>[{log.time}]</span>
-                <span style={{ color: log.type === 'gem' ? '#fff' : log.type === 'sec' ? '#ff0040' : '#00b4d8' }}>{log.msg}</span>
+              <div key={log.id} style={{ fontSize: '12px', borderLeft: `2px solid ${log.type === 'gem' ? 'var(--neon-blue)' : log.type === 'sec' ? 'var(--neon-red)' : '#444'}`, paddingLeft: '12px' }}>
+                <div style={{ color: '#444', fontSize: '9px', marginBottom: '4px' }}>T-ID: {log.id} // {log.time}</div>
+                <div style={{ color: log.type === 'gem' ? '#fff' : log.type === 'sec' ? 'var(--neon-red)' : 'var(--neon-blue)' }}>{log.msg}</div>
               </div>
             ))}
           </div>
-          <div style={{ padding: '25px', borderTop: '1px solid #222', background: '#000' }}>
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-              <span style={{ color: '#00f2ff', fontWeight: 'bold' }}>&gt;</span>
+          
+          <div style={{ padding: '30px', background: 'rgba(0,0,0,0.9)', borderTop: '1px solid #222' }}>
+            <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+              <span style={{ color: 'var(--neon-green)' }}>#</span>
               <input 
                 type="text" 
                 value={inputMessage}
                 onChange={e => setInputMessage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    sendToGemini();
-                  }
-                }}
+                onKeyDown={(e) => e.key === 'Enter' && sendToGemini()}
                 placeholder="命令を入力..."
-                style={{ width: '100%', background: 'none', border: 'none', color: '#39ff14', outline: 'none', fontFamily: 'monospace', fontSize: '13px' }}
+                style={{ width: '100%', background: 'none', border: 'none', color: 'var(--neon-green)', outline: 'none', fontSize: '14px' }}
               />
             </div>
           </div>
         </section>
       </div>
+
+      {/* FOOTER: リーガル/ステータス */}
+      <footer style={{ height: '32px', background: '#000', borderTop: '1px solid #222', display: 'flex', alignItems: 'center', px: '20px', fontSize: '10px', color: '#444', justifyContent: 'space-between', padding: '0 20px' }}>
+        <div>© 2026 LARU Nexus - All Systems Encrypted.</div>
+        <div style={{ display: 'flex', gap: '20px' }}>
+          <span>LATENCY: 12ms</span>
+          <span>UPTIME: 99.9%</span>
+          <span style={{ color: 'var(--neon-green)' }}>● SECURE_MODE_ACTIVE</span>
+        </div>
+      </footer>
     </div>
   );
 }
