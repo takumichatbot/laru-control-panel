@@ -69,7 +69,8 @@ export default function LaruNexusV15() {
     setInputMessage('');
 
     try {
-      const res = await fetch('/api/gemini', {
+      // キャッシュを回避するためにランダムなクエリパラメータを追加
+      const res = await fetch(`/api/gemini?t=${Date.now()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: messageToSend })
@@ -78,25 +79,17 @@ export default function LaruNexusV15() {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || `通信エラー: ${res.status}`);
+        // ここで詳細なエラー内容をログに出す
+        throw new Error(data.error || `HTTP_${res.status}`);
       }
-
-      if (data.functionCalls && data.functionCalls.length > 0) {
-        data.functionCalls.forEach((call: any) => {
-          if (call.name === "restart_service") {
-            const sid = call.args.serviceId;
-            setServices(prev => ({ ...prev, [sid]: { ...prev[sid], status: 'NOMINAL', cpu: 0 } }));
-            addLog(`RESTORE: ${sid.toUpperCase()} サービスを再起動しました。`, 'sec');
-          }
-        });
-        addLog("命令プロトコルを実行しました。システムを正常化しました。", "gemini");
-      } else if (data.text) {
+      
+      if (data.text) {
         addLog(data.text, 'gemini');
       }
     } catch (error: any) {
       addLog(`ERR_AUTH: 通信プロトコルが遮断されました。`, "sec");
-      addLog(`REASON: ${error.message}`, "sys");
-      addLog(`DEBUG: RenderのEnvironment設定で変数が正しいか確認してください。`, "sys");
+      addLog(`REASON: ${error.message.toUpperCase()}`, "sys");
+      addLog(`ACTION: ブラウザのキャッシュをクリアするかシークレットモードで試してください。`, "sys");
     } finally {
       setIsThinking(false);
     }
