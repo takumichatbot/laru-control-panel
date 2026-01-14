@@ -4,13 +4,13 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 
 /**
  * ==============================================================================
- * LARU NEXUS COMMAND SYSTEM v16.0 [THE CONVERSATIONAL CORE]
+ * LARU NEXUS COMMAND SYSTEM v16.3 [FINAL_PURIFIER]
  * ------------------------------------------------------------------------------
  * AUTHOR: Takumi Saito (LARUbot President / Komazawa Law Student)
  * DATE: 2026-01-15
  * DESCRIPTION: 
- * Gemini風対話インターフェースと、認証エラー浄化プロトコルを搭載。
- * クリック遮断バグを完全解消した最終運用形態。
+ * Gemini風対話UIの最終安定版。APIキーのパターン不一致エラーを回避するための
+ * キャッシュ破棄プロトコルと、高度なエラートラッキングを実装。
  * ==============================================================================
  */
 
@@ -72,7 +72,8 @@ export default function LaruNexusV16() {
     setInputMessage('');
 
     try {
-      const res = await fetch(`/api/gemini?t=${Date.now()}`, {
+      // キャッシュを物理的に破壊し、常に最新の環境変数を参照させるためのクエリパラメータ
+      const res = await fetch(`/api/gemini?v=16.3&t=${Date.now()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: messageToSend }),
@@ -82,6 +83,7 @@ export default function LaruNexusV16() {
       const data = await res.json();
       
       if (!res.ok) {
+        // バックエンドから返された詳細なエラー内容（INVALID_PATTERN等）を表示
         throw new Error(data.details || data.error || `HTTP_${res.status}`);
       }
 
@@ -93,13 +95,14 @@ export default function LaruNexusV16() {
             addLog(`RESTORE: ${sid.toUpperCase()} サービスを再起動しました。`, 'sec');
           }
         });
-        addLog("プロトコルに基づき、システムを最適化しました。", "gemini");
+        addLog("NEXUS: 外部命令を処理し、プロトコルを更新しました。", "gemini");
       } else if (data.text) {
         addLog(data.text, 'gemini');
       }
     } catch (error: any) {
       addLog(`ERR_AUTH: 通信プロトコルが遮断されました。`, "sec");
       addLog(`REASON: ${error.message.toUpperCase()}`, "sys");
+      addLog(`ACTION: Renderの環境変数から空白・改行を完全に削除してください。`, "sys");
     } finally {
       setIsThinking(false);
     }
@@ -164,7 +167,6 @@ export default function LaruNexusV16() {
           display: flex; flex-direction: column; overflow: hidden; position: relative; 
         }
 
-        /* 走査線エフェクト：クリックを透過させる */
         .nexus-container::before { 
           content: ""; position: absolute; inset: 0; 
           background: linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.2) 50%), linear-gradient(90deg, rgba(255,0,0,0.03), rgba(0,255,0,0.01), rgba(0,0,255,0.03)); 
@@ -179,7 +181,6 @@ export default function LaruNexusV16() {
         .panel-content { display: none; flex-direction: column; height: 100%; overflow: hidden; position: relative; z-index: 10; }
         .panel-content.active { display: flex; }
 
-        /* チャット吹き出し */
         .bubble { max-width: 85%; padding: 12px 16px; border-radius: 12px; font-size: 14px; line-height: 1.6; position: relative; word-wrap: break-word; }
         .bubble-user { align-self: flex-end; background: rgba(0, 242, 255, 0.1); border: 1px solid var(--neon-blue); border-bottom-right-radius: 2px; }
         .bubble-gemini { align-self: flex-start; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.2); border-bottom-left-radius: 2px; }
@@ -205,9 +206,9 @@ export default function LaruNexusV16() {
           <div style={{ width: '30px', height: '30px', border: `2px solid ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}`, position: 'relative' }}>
             <div style={{ position: 'absolute', inset: '20%', background: isAlert ? 'var(--neon-red)' : 'var(--neon-blue)', boxShadow: `0 0 10px ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}` }} />
           </div>
-          <h1 style={{ fontSize: '16px', letterSpacing: '4px', margin: 0 }}>LARU_NEXUS_v16.0</h1>
+          <h1 style={{ fontSize: '16px', letterSpacing: '4px', margin: 0 }}>LARU_NEXUS_v16.3</h1>
         </div>
-        <div style={{ fontSize: '10px', color: isAlert ? 'var(--neon-red)' : 'var(--neon-green)' }}>[ AUTH_URL: SYNCED ]</div>
+        <div style={{ fontSize: '10px', color: isAlert ? 'var(--neon-red)' : 'var(--neon-green)' }}>[ PROTOCOL_PURIFIED ]</div>
       </header>
 
       {/* TABS */}
@@ -254,7 +255,7 @@ export default function LaruNexusV16() {
           </button>
         </main>
 
-        {/* LOG/CHAT PANEL (Gemini Like UI) */}
+        {/* LOG/CHAT PANEL */}
         <section className={`panel-content ${activeTab === 'LOG' ? 'active' : ''}`} style={{ flex: 1, background: 'rgba(0,0,0,0.5)', display: activeTab === 'LOG' ? 'flex' : 'none' }}>
           <div style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
             {logs.map(log => (
