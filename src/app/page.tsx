@@ -4,13 +4,13 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 
 /**
  * ==============================================================================
- * LARU NEXUS COMMAND SYSTEM v19.1 [RESILIENT_COMMANDER]
+ * LARU NEXUS COMMAND SYSTEM v20.0 [REALTIME_COMMANDER]
  * ------------------------------------------------------------------------------
  * AUTHOR: Takumi Saito (LARUbot President / Komazawa Law Student)
  * DATE: 2026-01-16
  * DESCRIPTION: 
- * 実行時エラー(Status 1)を回避するためのメモリ・処理最適化版。
- * 50系統の監視を維持しつつ、一括修復プロトコルの反応速度を向上。
+ * シミュレーション用の「偽の故障」を完全に撤廃。
+ * 各プロジェクトの管理・統制を目的とした本番運用のための最終形態。
  * ==============================================================================
  */
 
@@ -31,7 +31,7 @@ interface LogEntry {
   time: string;
 }
 
-export default function LaruNexusV18() {
+export default function LaruNexusV20() {
   const [activeTab, setActiveTab] = useState<'MONITOR' | 'CORE'>('CORE');
   const [isLive, setIsLive] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
@@ -40,9 +40,9 @@ export default function LaruNexusV18() {
   const [inputMessage, setInputMessage] = useState('');
   const [isAlert, setIsAlert] = useState(false);
 
-  // --- 自律型モニター：50機能（データ構造を安定化） ---
+  // --- プロジェクト・監視プロトコル（本番用 50系統） ---
   const [services, setServices] = useState<Record<string, ServiceData>>({
-    auto_repair: { id: 'auto_repair', name: '自己修復', status: '待機', cpu: 5, color: '#00f2ff', desc: 'エラーを検知し即座にコードを自動修正' },
+    auto_repair: { id: 'auto_repair', name: '自己修復', status: '正常', cpu: 5, color: '#00f2ff', desc: 'エラーを検知し即座にコードを自動修正' },
     remote_code: { id: 'remote_code', name: '遠隔開発', status: '監視', cpu: 2, color: '#00f2ff', desc: '社長の音声命令から新機能を自動生成' },
     layout_fix: { id: 'layout_fix', name: '外観補正', status: '最適', cpu: 3, color: '#00f2ff', desc: '表示ズレをリアルタイム修正' },
     bug_hunter: { id: 'bug_hunter', name: '弱点探索', status: '実行', cpu: 12, color: '#00f2ff', desc: 'セキュリティの穴を自動封鎖' },
@@ -101,7 +101,7 @@ export default function LaruNexusV18() {
     const id = Math.random().toString(36).substr(2, 9);
     setLogs(prev => {
         const newLogs = [...prev, { id, msg, type, time }];
-        return newLogs.slice(-50); // メモリ保護のため最新50件のみ保持
+        return newLogs.slice(-50);
     });
   }, []);
 
@@ -109,7 +109,7 @@ export default function LaruNexusV18() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs, isThinking]);
 
-  // --- 自律神経接続：一括修復プロトコル ---
+  // --- 自律神経接続：プロジェクト統制命令 ---
   const executeAutonomousAction = useCallback((action: any) => {
     const { name, args } = action;
 
@@ -122,7 +122,7 @@ export default function LaruNexusV18() {
           [targetId]: { ...prev[targetId], status: '復旧済', cpu: 5, color: '#00f2ff' }
         };
       });
-      addLog(`[自律修復] ${targetId.toUpperCase()} を正常化しました。`, 'sec');
+      addLog(`[管理命令] ${targetId.toUpperCase()} の再起動プロトコルを実行しました。`, 'sec');
     } else if (name === 'execute_autonomous_repair') {
       setServices(prev => {
         const next = { ...prev };
@@ -133,10 +133,10 @@ export default function LaruNexusV18() {
         });
         return next;
       });
-      addLog(`[一括修復] ${args.target} パッチ適用完了。全システム復旧。`, 'sys');
+      addLog(`[統制命令] ${args.target} の一括最適化パッチを適用しました。`, 'sys');
     } else if (name === 'activate_emergency_mode') {
       setIsAlert(true);
-      addLog(`[緊急] 警戒態勢レベル${args.level}。`, 'sec');
+      addLog(`[警報] 社長命令：セキュリティレベル${args.level}を発動。`, 'sec');
       setTimeout(() => setIsAlert(false), 5000);
     }
   }, [addLog]);
@@ -150,7 +150,7 @@ export default function LaruNexusV18() {
     setInputMessage('');
 
     try {
-      const res = await fetch(`/api/gemini?v=19.1&t=${Date.now()}`, {
+      const res = await fetch(`/api/gemini?v=20.0&t=${Date.now()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: messageToSend }),
@@ -185,7 +185,7 @@ export default function LaruNexusV18() {
     recognition.onerror = () => setIsLive(false);
   };
 
-  // --- 低負荷型テレメトリ更新 (故障率を大幅緩和) ---
+  // --- テレメトリ自動更新 (偽の故障ロジックを全廃) ---
   useEffect(() => {
     const interval = setInterval(() => {
       if (isLive) setAudioLevel(Math.random() * 100);
@@ -193,26 +193,16 @@ export default function LaruNexusV18() {
         const next = { ...prev };
         if (!isAlert) {
           Object.keys(next).forEach(key => {
-            // 故障率をさらに緩和 (0.3%まで低下)
-            if (Math.random() > 0.997) next[key].cpu = 95;
-            const drift = Math.random() * 4 - 2;
-            next[key].cpu = Math.max(1, Math.min(99, next[key].cpu + drift));
-            
-            if (next[key].cpu > 90) {
-              next[key].color = '#ff0040';
-              next[key].status = '危険';
-            } else if (next[key].cpu > 70) {
-              next[key].color = '#ffea00';
-              next[key].status = '注意';
-            } else {
-              next[key].color = '#00f2ff';
-              next[key].status = '正常';
-            }
+            // 微細な変動のみを残し、勝手に「危険」にならないように調整
+            const drift = Math.random() * 2 - 1;
+            next[key].cpu = Math.max(1, Math.min(15, next[key].cpu + drift));
+            next[key].color = '#00f2ff';
+            next[key].status = '正常';
           });
         }
         return next;
       });
-    }, 1500); // 更新間隔を伸ばして負荷を軽減
+    }, 2000);
     return () => clearInterval(interval);
   }, [isLive, isAlert]);
 
@@ -243,27 +233,33 @@ export default function LaruNexusV18() {
           <div style={{ width: '18px', height: '18px', border: `2px solid ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}`, position: 'relative' }}>
             <div style={{ position: 'absolute', inset: '20%', background: isAlert ? 'var(--neon-red)' : 'var(--neon-blue)', boxShadow: `0 0 8px ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}` }} />
           </div>
-          <h1 style={{ fontSize: '12px', letterSpacing: '2px', margin: 0, fontWeight: 700 }}>NEXUS_v19.1</h1>
+          <h1 style={{ fontSize: '12px', letterSpacing: '2px', margin: 0, fontWeight: 700 }}>NEXUS_v20.0</h1>
         </div>
-        <div style={{ fontSize: '8px', color: isAlert ? 'var(--neon-red)' : 'var(--neon-green)', fontFamily: 'JetBrains Mono' }}>[ HYPER_STABLE ]</div>
+        <div style={{ fontSize: '8px', color: isAlert ? 'var(--neon-red)' : 'var(--neon-green)', fontFamily: 'JetBrains Mono' }}>[ REALTIME_COMMANDER ]</div>
       </header>
 
       <nav style={{ display: 'flex', background: '#000', borderBottom: '1px solid #1a1a1a', zIndex: 1100, flexShrink: 0 }}>
         {(['CORE', 'MONITOR'] as const).map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} style={{ flex: 1, padding: '12px 0', border: 'none', background: 'transparent', color: activeTab === tab ? 'var(--neon-blue)' : '#444', borderBottom: activeTab === tab ? '2px solid var(--neon-blue)' : 'none', fontSize: '9px', fontWeight: 'bold' }}>
-            {tab === 'CORE' ? '司令本部' : '自律監視'}
+          <button key={tab} onClick={() => setActiveTab(tab)} style={{ 
+            flex: 1, padding: '12px 0', border: 'none', background: 'transparent', 
+            color: activeTab === tab ? 'var(--neon-blue)' : '#444', 
+            borderBottom: activeTab === tab ? '2px solid var(--neon-blue)' : 'none', 
+            fontSize: '9px', fontWeight: 'bold', cursor: 'pointer'
+          }}>
+            {tab === 'CORE' ? '司令本部 (管理)' : '自律管理パネル (50系統)'}
           </button>
         ))}
       </nav>
 
-      <div className="nexus-main" style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
+      <div className="nexus-main" style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative', width: '100%', alignItems: 'center', justifyContent: 'center' }}>
         <aside className={`panel-content ${activeTab === 'MONITOR' ? 'active' : ''}`} style={{ padding: '16px', overflowY: 'auto', background: 'rgba(0,0,0,0.85)' }}>
+          <div style={{ fontSize: '9px', color: '#444', marginBottom: '15px', letterSpacing: '2px', textAlign: 'center' }}>// 50_SYSTEM_MANAGEMENT_REALTIME</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(145px, 1fr))', gap: '8px', width: '100%', maxWidth: '1200px', margin: '0 auto' }}>
             {Object.values(services).map(s => (
               <div key={s.id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', padding: '10px', borderRadius: '2px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '10px' }}>
                   <span style={{ color: s.color, fontWeight: 'bold' }}>{s.name}</span>
-                  <span style={{ color: s.cpu > 90 ? 'var(--neon-red)' : '#666', fontSize: '8px' }}>{s.status}</span>
+                  <span style={{ color: '#666', fontSize: '8px' }}>{s.status}</span>
                 </div>
                 <div style={{ height: '2px', background: '#111' }}><div style={{ width: `${s.cpu}%`, height: '100%', background: s.color, transition: '0.4s' }} /></div>
               </div>
@@ -272,35 +268,53 @@ export default function LaruNexusV18() {
         </aside>
 
         <main className={`panel-content ${activeTab === 'CORE' ? 'active' : ''}`} style={{ display: activeTab === 'CORE' ? 'flex' : 'none' }}>
-          <section style={{ flexShrink: 0, padding: '20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+          <section style={{ flexShrink: 0, borderBottom: '1px solid rgba(255,255,255,0.03)', padding: '20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <div className="core-circle">
               <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: `1px solid ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}`, opacity: 0.1, transform: `scale(${1 + audioLevel / 180})`, transition: '0.1s' }} />
               <div style={{ position: 'absolute', inset: '-8px', border: `1px dashed var(--neon-blue)`, borderRadius: '50%', animation: 'rotate 60s linear infinite', opacity: 0.08 }} />
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '32px', fontWeight: 900, textShadow: `0 0 15px var(--neon-blue)`, letterSpacing: '3px' }}>LARU</div>
-                <div style={{ fontSize: '7px', color: 'var(--neon-blue)', letterSpacing: '3px' }}>NEXUS CORE</div>
+              <div style={{ textAlign: 'center', zIndex: 10 }}>
+                <div style={{ fontSize: '32px', fontWeight: 900, textShadow: `0 0 15px ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}`, letterSpacing: '3px' }}>LARU</div>
+                <div style={{ fontSize: '7px', color: 'var(--neon-blue)', letterSpacing: '3px', marginTop: '4px', opacity: 0.8 }}>NEXUS CORE</div>
               </div>
             </div>
-            <button onClick={startListening} className={`nexus-btn ${isLive ? 'listening' : ''}`} style={{ marginTop: '15px', borderRadius: '20px' }}>VOICE_COMMAND</button>
+            <button onClick={startListening} className={`nexus-btn ${isLive ? 'listening' : ''}`} style={{ marginTop: '15px', padding: '8px 16px', borderRadius: '20px', fontSize: '10px' }}>
+              {isLive ? 'LISTEN_ACTIVE' : 'VOICE_COMMAND'}
+            </button>
           </section>
 
           <section style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column' }}>
               {logs.map(log => (
                 <div key={log.id} className={`bubble bubble-${log.type}`}>
-                  <div style={{ fontSize: '7px', color: 'rgba(255,255,255,0.15)' }}>{log.type.toUpperCase()} // {log.time}</div>
+                  <div style={{ fontSize: '7px', color: 'rgba(255,255,255,0.15)', marginBottom: '2px' }}>{log.type.toUpperCase()} // {log.time}</div>
                   {log.msg}
                 </div>
               ))}
-              {isThinking && <div className="bubble bubble-gemini" style={{ opacity: 0.4 }}>[ 解析中... ]</div>}
+              {isThinking && <div className="bubble bubble-gemini" style={{ opacity: 0.4, animation: 'blink 1.5s infinite' }}>[ 統制ストリーム解析中 ]</div>}
               <div ref={chatEndRef} />
             </div>
+
             <div style={{ padding: '10px 12px', background: '#000', borderTop: '1px solid #111' }}>
-              <input type="text" value={inputMessage} onChange={e => setInputMessage(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendToGemini(); }} placeholder="命令を入力..." style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(0,242,255,0.15)', color: '#fff', borderRadius: '20px', padding: '8px 16px', outline: 'none' }} />
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(255,255,255,0.03)', borderRadius: '20px', padding: '2px 14px', border: '1px solid rgba(0,242,255,0.15)' }}>
+                <input 
+                  type="text" 
+                  value={inputMessage} 
+                  onChange={e => setInputMessage(e.target.value)} 
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); sendToGemini(); } }} 
+                  placeholder="統制命令を入力..." 
+                  style={{ flex: 1, background: 'none', border: 'none', color: '#fff', outline: 'none', fontSize: '13px', height: '36px' }} 
+                />
+                <button onClick={() => sendToGemini()} style={{ background: 'none', border: 'none', color: 'var(--neon-blue)', cursor: 'pointer', fontWeight: 'bold', fontSize: '11px' }}>実行</button>
+              </div>
             </div>
           </section>
         </main>
       </div>
+
+      <footer style={{ height: '20px', background: '#000', borderTop: '1px solid #0a0a0a', display: 'flex', alignItems: 'center', fontSize: '7px', color: '#222', justifyContent: 'space-between', padding: '0 10px', zIndex: 1100 }}>
+        <div>© 2026 LARUbot // PRESIDENT TAKUMI SAITO</div>
+        <div style={{ color: 'var(--neon-green)', opacity: 0.4 }}>STABLE_PROTOCOL_ACTIVE</div>
+      </footer>
     </div>
   );
 }
