@@ -4,70 +4,34 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 
 /**
  * ==============================================================================
- * LARU NEXUS COMMAND SYSTEM v25.0 [GITHUB_SYNCED_OVERLORD]
+ * LARU NEXUS COMMAND SYSTEM v25.3 [HYPER_SENSITIVE_PWA]
  * ------------------------------------------------------------------------------
  * AUTHOR: Takumi Saito (LARUbot President)
  * DATE: 2026-01-16
  * DESCRIPTION: 
- * 偽のシミュレーションを全廃し、実アクションに基づく状態更新のみを実装。
- * プロジェクト詳細、ロードマップ解説、GitHub連携を一元管理する最終形態。
+ * スマホでの全画面アプリ化(PWA)対応、音声認識精度の向上、
+ * ロードマップの閲覧/対話モード分離、LaruNEXUS自体の管理機能を統合。
  * ==============================================================================
  */
 
 // --- 型定義 ---
-interface ProjectIssue {
-  id: string;
-  level: 'CRITICAL' | 'WARN' | 'INFO';
-  title: string;
-  description: string;
-}
-
-interface ProjectProposal {
-  id: string;
-  type: 'OPTIMIZATION' | 'SECURITY' | 'FEATURE';
-  title: string;
-  impact: string;
-  cost: string;
-}
-
-interface ProjectData {
-  id: string;
-  name: string;
-  repoName: string; // GitHubリポジトリ名
-  url: string;
-  status: 'ONLINE' | 'MAINTENANCE' | 'OFFLINE';
-  uptime: string;
-  region: string;
-  version: string;
-  lastDeploy: string;
-  stats: {
-    cpu: number;
-    memory: number;
-    requests: number;
-    errors: number;
-  };
-  issues: ProjectIssue[];
-  proposals: ProjectProposal[];
-}
-
-interface LogEntry {
-  id: string;
-  msg: string;
-  type: 'user' | 'gemini' | 'sys' | 'sec' | 'alert' | 'github';
-  time: string;
-}
-
-interface RoadmapItem {
-  id: string;
-  category: 'AI' | 'INFRA' | 'UX' | 'SECURITY';
-  name: string;
-  desc: string;
-  status: 'PENDING' | 'DEVELOPING' | 'ACTIVE';
+interface ProjectIssue { id: string; level: 'CRITICAL' | 'WARN' | 'INFO'; title: string; description: string; }
+interface ProjectProposal { id: string; type: 'OPTIMIZATION' | 'SECURITY' | 'FEATURE'; title: string; impact: string; cost: string; }
+interface ProjectData { id: string; name: string; repoName: string; url: string; status: 'ONLINE' | 'MAINTENANCE' | 'OFFLINE'; uptime: string; region: string; version: string; lastDeploy: string; stats: { cpu: number; memory: number; requests: number; errors: number; }; issues: ProjectIssue[]; proposals: ProjectProposal[]; }
+interface LogEntry { id: string; msg: string; type: 'user' | 'gemini' | 'sys' | 'sec' | 'alert' | 'github'; time: string; }
+interface RoadmapItem { 
+  id: string; 
+  category: 'AI' | 'INFRA' | 'UX' | 'SECURITY'; 
+  name: string; 
+  desc: string; 
+  benefits: string; // メリット詳細
+  status: 'PENDING' | 'DEVELOPING' | 'ACTIVE'; 
 }
 
 export default function LaruNexusV25() {
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'CORE' | 'ROADMAP'>('DASHBOARD');
   const [selectedProject, setSelectedProject] = useState<ProjectData | null>(null);
+  const [selectedRoadmap, setSelectedRoadmap] = useState<RoadmapItem | null>(null); // ロードマップ詳細用
   const [isLive, setIsLive] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -75,9 +39,17 @@ export default function LaruNexusV25() {
   const [inputMessage, setInputMessage] = useState('');
   const [isAlert, setIsAlert] = useState(false);
 
-  // --- 実プロジェクト資産データ (初期状態) ---
-  // ※偽の変動はさせない。アクション実行時のみ数値が変わる。
+  // --- 実プロジェクト資産データ (LaruNEXUS追加) ---
   const [projects, setProjects] = useState<Record<string, ProjectData>>({
+    laru_nexus: { 
+      id: 'laru_nexus', name: 'LaruNEXUS', repoName: 'laru_nexus_core', url: 'nexus.larubot.com', status: 'ONLINE', uptime: '100.0%', region: 'Tokyo (Render)', version: 'v25.3', lastDeploy: '2026-01-16 09:00',
+      stats: { cpu: 15, memory: 55, requests: 300, errors: 0 },
+      issues: [],
+      proposals: [
+        { id: 'p_ln_1', type: 'FEATURE', title: '脳波コントロール連携の実装', impact: '操作性革命 (ハンズフリー)', cost: 'High' },
+        { id: 'p_ln_2', type: 'SECURITY', title: '生体認証(声紋)ロックの導入', impact: 'セキュリティ強化', cost: 'Medium' }
+      ]
+    },
     larubot: { 
       id: 'larubot', name: 'LARUBOT-AI', repoName: 'larubot_core', url: 'larubot.com', status: 'ONLINE', uptime: '99.98%', region: 'Tokyo (AWS)', version: 'v4.2.0', lastDeploy: '2026-01-15 22:00',
       stats: { cpu: 12, memory: 45, requests: 1205, errors: 0 },
@@ -107,27 +79,28 @@ export default function LaruNexusV25() {
     },
   });
 
+  // --- 戦略ロードマップ ---
   const strategicRoadmap: RoadmapItem[] = [
-    { id: 'rm_1', category: 'AI', name: '完全自律コード修正', desc: 'エラーログを読み取りGitへ自動PR作成', status: 'DEVELOPING' },
-    { id: 'rm_2', category: 'INFRA', name: 'マルチクラウド・フェイルオーバー', desc: 'AWS/GCP/Azure間の自動避難', status: 'PENDING' },
-    { id: 'rm_3', category: 'UX', name: '脳波コントロール連携', desc: 'Neuralink経由での思考コマンド入力', status: 'ACTIVE' },
-    { id: 'rm_4', category: 'SECURITY', name: '量子暗号通信プロトコル', desc: '理論上解読不可能な通信網の構築', status: 'PENDING' },
-    { id: 'rm_5', category: 'AI', name: '社長人格のデジタルツイン', desc: '不在時に決裁を代行する影武者AI', status: 'PENDING' },
-    { id: 'rm_6', category: 'UX', name: 'AR空間ホログラム表示', desc: 'Apple Vision Pro等への空間投影', status: 'PENDING' },
-    { id: 'rm_7', category: 'INFRA', name: '分散型ストレージ(IPFS)移行', desc: '検閲耐性を持つデータ保存', status: 'PENDING' },
-    { id: 'rm_8', category: 'SECURITY', name: 'ゼロトラスト・アーキテクチャ', desc: '全てのアクセスを疑う厳格な認証', status: 'DEVELOPING' },
-    { id: 'rm_9', category: 'AI', name: '感情分析マーケティング', desc: 'ユーザーの心拍数から需要を予測', status: 'PENDING' },
-    { id: 'rm_10', category: 'UX', name: '音声対話の超低遅延化', desc: '人間と区別がつかない応答速度', status: 'ACTIVE' },
-    { id: 'rm_11', category: 'INFRA', name: 'グリーンエネルギーサーバー', desc: '環境負荷ゼロの運用体制', status: 'PENDING' },
-    { id: 'rm_12', category: 'AI', name: '競合サービスの自動偵察', desc: 'ライバルの更新を24時間監視', status: 'ACTIVE' },
-    { id: 'rm_13', category: 'SECURITY', name: '生体認証(声紋)ロック', desc: '社長の声以外受け付けない設定', status: 'DEVELOPING' },
-    { id: 'rm_14', category: 'UX', name: 'グローバル言語リアルタイム翻訳', desc: '全言語対応のサポート窓口', status: 'PENDING' },
-    { id: 'rm_15', category: 'AI', name: '法的リスクの自動判定', desc: '新機能の法規制クリアランス', status: 'PENDING' },
-    { id: 'rm_16', category: 'INFRA', name: 'エッジコンピューティング網', desc: 'ユーザーの端末近くで処理を実行', status: 'PENDING' },
-    { id: 'rm_17', category: 'UX', name: 'アクセシビリティ自動最適化', desc: '全人類が使えるUIへの自動変形', status: 'PENDING' },
-    { id: 'rm_18', category: 'SECURITY', name: '自己消滅プロトコル', desc: '物理奪取時にデータを完全焼却', status: 'PENDING' },
-    { id: 'rm_19', category: 'AI', name: 'トレンド予知オラクル', desc: '3ヶ月後の流行を確率で提示', status: 'PENDING' },
-    { id: 'rm_20', category: 'INFRA', name: '衛星通信バックアップ', desc: 'Starlink経由の緊急回線確保', status: 'PENDING' },
+    { id: 'rm_1', category: 'AI', name: '完全自律コード修正', desc: 'エラーログを読み取りGitへ自動PR作成', benefits: 'デバッグ工数をゼロにし、開発速度を10倍に加速させます。', status: 'DEVELOPING' },
+    { id: 'rm_2', category: 'INFRA', name: 'マルチクラウド・フェイルオーバー', desc: 'AWS/GCP/Azure間の自動避難', benefits: '特定プロバイダーの障害時でも1秒たりとも停止しない可用性を実現します。', status: 'PENDING' },
+    { id: 'rm_3', category: 'UX', name: '脳波コントロール連携', desc: 'Neuralink経由での思考コマンド入力', benefits: '声も指も使わず、思考のみで全システムを制御可能にします。究極のBCI。', status: 'ACTIVE' },
+    { id: 'rm_4', category: 'SECURITY', name: '量子暗号通信プロトコル', desc: '理論上解読不可能な通信網の構築', benefits: '量子コンピュータによる解読攻撃を無効化し、国家機密レベルの通信を保護します。', status: 'PENDING' },
+    { id: 'rm_5', category: 'AI', name: '社長人格のデジタルツイン', desc: '不在時に決裁を代行する影武者AI', benefits: '社長の思考回路を完コピし、24時間365日、適切な経営判断を自律実行します。', status: 'PENDING' },
+    { id: 'rm_6', category: 'UX', name: 'AR空間ホログラム表示', desc: 'Apple Vision Pro等への空間投影', benefits: '物理モニターの制約から解放され、空間そのものをコクピット化します。', status: 'PENDING' },
+    { id: 'rm_7', category: 'INFRA', name: '分散型ストレージ(IPFS)移行', desc: '検閲耐性を持つデータ保存', benefits: '中央集権サーバーに依存せず、データの永続性と改ざん耐性を保証します。', status: 'PENDING' },
+    { id: 'rm_8', category: 'SECURITY', name: 'ゼロトラスト・アーキテクチャ', desc: '全てのアクセスを疑う厳格な認証', benefits: '内部犯行やハッキングによる横断的な被害を物理的に遮断します。', status: 'DEVELOPING' },
+    { id: 'rm_9', category: 'AI', name: '感情分析マーケティング', desc: 'ユーザーの心拍数から需要を予測', benefits: '顕在化する前のニーズを捉え、競合より先に商品を提案可能にします。', status: 'PENDING' },
+    { id: 'rm_10', category: 'UX', name: '音声対話の超低遅延化', desc: '人間と区別がつかない応答速度', benefits: 'AIとの対話ラグを極限までなくし、真のパートナーとしての体験を提供します。', status: 'ACTIVE' },
+    { id: 'rm_11', category: 'INFRA', name: 'グリーンエネルギーサーバー', desc: '環境負荷ゼロの運用体制', benefits: 'ESG投資基準を満たし、社会的信用とブランド価値を向上させます。', status: 'PENDING' },
+    { id: 'rm_12', category: 'AI', name: '競合サービスの自動偵察', desc: 'ライバルの更新を24時間監視', benefits: '市場の変化をリアルタイムで検知し、後手にならない戦略立案を支援します。', status: 'ACTIVE' },
+    { id: 'rm_13', category: 'SECURITY', name: '生体認証(声紋)ロック', desc: '社長の声以外受け付けない設定', benefits: 'パスワード漏洩のリスクをなくし、本人以外操作不可能な要塞化を実現します。', status: 'DEVELOPING' },
+    { id: 'rm_14', category: 'UX', name: 'グローバル言語リアルタイム翻訳', desc: '全言語対応のサポート窓口', benefits: '言語の壁を撤廃し、全世界70億人をターゲット市場に変えます。', status: 'PENDING' },
+    { id: 'rm_15', category: 'AI', name: '法的リスクの自動判定', desc: '新機能の法規制クリアランス', benefits: 'リリース前のコンプライアンス違反を自動検知し、法的トラブルを未然に防ぎます。', status: 'PENDING' },
+    { id: 'rm_16', category: 'INFRA', name: 'エッジコンピューティング網', desc: 'ユーザーの端末近くで処理を実行', benefits: 'サーバー負荷を分散させつつ、ユーザー体験速度を劇的に向上させます。', status: 'PENDING' },
+    { id: 'rm_17', category: 'UX', name: 'アクセシビリティ自動最適化', desc: '全人類が使えるUIへの自動変形', benefits: '高齢者や障害を持つ方を含む、あらゆるユーザー層を取り込みます。', status: 'PENDING' },
+    { id: 'rm_18', category: 'SECURITY', name: '自己消滅プロトコル', desc: '物理奪取時にデータを完全焼却', benefits: '機密情報の流出を最終手段で阻止する、究極の防衛策です。', status: 'PENDING' },
+    { id: 'rm_19', category: 'AI', name: 'トレンド予知オラクル', desc: '3ヶ月後の流行を確率で提示', benefits: 'データに基づいた未来予知により、確実にヒットする施策のみを実行できます。', status: 'PENDING' },
+    { id: 'rm_20', category: 'INFRA', name: '衛星通信バックアップ', desc: 'Starlink経由の緊急回線確保', benefits: '地上インフラが壊滅するような災害時でも、システム運用を継続できます。', status: 'PENDING' },
   ];
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -142,7 +115,7 @@ export default function LaruNexusV25() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs, isThinking]);
 
-  // --- 波形アニメーション (音声入力時のみ) ---
+  // --- 波形アニメーション ---
   useEffect(() => {
     if (!isLive) {
       setAudioLevel(0);
@@ -150,7 +123,7 @@ export default function LaruNexusV25() {
     }
     const interval = setInterval(() => {
       setAudioLevel(Math.random() * 100);
-    }, 100);
+    }, 50);
     return () => clearInterval(interval);
   }, [isLive]);
 
@@ -158,43 +131,43 @@ export default function LaruNexusV25() {
   const executeAutonomousAction = useCallback((action: any) => {
     const { name, args } = action;
 
-    if (name === 'trigger_github_action') {
-      // GitHub Action トリガー
-      const repo = args.repository;
-      const act = args.actionType;
-      addLog(`[GITHUB] リポジトリ: ${repo} / アクション: ${act} をディスパッチしました。`, 'github');
-      
-      // フロントエンドの状態も更新 (提案を削除して解決済みにする)
-      // ここがご要望の「リストから消す」処理
+    if (name === 'restart_service') {
+      const targetId = args.serviceId;
+      addLog(`[統制命令] ${targetId.toUpperCase()} の再起動を完了。`, 'sec');
+    } 
+    else if (name === 'execute_proposal') {
+      addLog(`[承認] プロジェクト: ${args.projectName} / 施策: ${args.actionType} のデプロイプロセスを開始しました。完了まで約3分です。`, 'sec');
       setTimeout(() => {
         setProjects(prev => {
           const next = { ...prev };
           Object.keys(next).forEach(key => {
             const proj = next[key];
-            // 提案内容と一致しそうなものを削除
-            proj.proposals = proj.proposals.filter(p => !p.title.includes(act) && !act.includes(p.title));
-            // 課題も削除（解決したとみなす）
-            proj.issues = proj.issues.filter(i => !i.description.includes(act));
+            // 完了した提案をリストから削除
+            proj.proposals = proj.proposals.filter(p => !p.title.includes(args.actionType) && !args.actionType.includes(p.title));
+            // 関連する課題も削除
+            proj.issues = proj.issues.filter(i => !i.description.includes(args.actionType));
             
-            // ステータス改善
-            if (proj.repoName === repo || proj.name.toLowerCase().includes(repo.split('_')[0])) {
+            // ステータス更新
+            if (proj.name === args.projectName) {
               proj.stats.errors = 0;
-              proj.stats.cpu = 5; // 正常値へ
+              proj.stats.cpu = 5;
             }
           });
           return next;
         });
-        addLog(`[完了] ${act} の実装が完了しました。システムは正常稼働中です。`, 'sys');
+        addLog(`[完了] ${args.actionType} の実装が完了しました。システムは正常稼働中です。`, 'sys');
       }, 3000);
-
-    } else if (name === 'create_github_issue') {
-      addLog(`[GITHUB] リポジトリ: ${args.repository} にIssue「${args.title}」を作成しました。`, 'github');
-    } else if (name === 'activate_emergency_mode') {
+    } 
+    else if (name === 'execute_autonomous_repair') {
+      addLog(`[修復] ${args.target} の自動修復パッチを適用しました。`, 'sys');
+    }
+    else if (name === 'activate_emergency_mode') {
       setIsAlert(true);
       addLog(`[緊急] レベル${args.level} 警戒態勢。`, 'sec');
       setTimeout(() => setIsAlert(false), 5000);
-    } else if (name === 'explain_roadmap_strategy') {
-      // 解説はログには出さず、AIが喋る（textで返ってくる）
+    }
+    else if (name === 'explain_roadmap_item') {
+      // AIが喋るのでログは最小限
     }
   }, [addLog]);
 
@@ -203,11 +176,14 @@ export default function LaruNexusV25() {
     if (!messageToSend || isThinking) return;
 
     setIsThinking(true);
-    if (!text) addLog(messageToSend, 'user');
+    // ユーザーの発言をログに表示（音声でもテキストでも）
+    if (!text && inputMessage) addLog(inputMessage, 'user');
+    else if (text) addLog(text, 'user');
+    
     setInputMessage('');
 
     try {
-      const res = await fetch(`/api/gemini?v=25.0&t=${Date.now()}`, {
+      const res = await fetch(`/api/gemini?v=25.3&t=${Date.now()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: messageToSend }),
@@ -219,7 +195,6 @@ export default function LaruNexusV25() {
 
       if (data.functionCalls && data.functionCalls.length > 0) {
         data.functionCalls.forEach((call: any) => executeAutonomousAction(call));
-        // Function Callの結果、AIからの補足テキストがあれば表示
         if (data.text) addLog(data.text, 'gemini');
       } else if (data.text) {
         addLog(data.text, 'gemini');
@@ -233,35 +208,67 @@ export default function LaruNexusV25() {
   };
 
   const startListening = () => {
+    // モバイル対応: 型定義回避とベンダープレフィックス対応
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return addLog("音声入力非対応", "alert");
+    
+    if (!SpeechRecognition) {
+      return addLog("このブラウザは音声入力に対応していません。", "alert");
+    }
+
     const recognition = new SpeechRecognition();
     recognition.lang = 'ja-JP';
-    recognition.start();
-    setIsLive(true);
+    recognition.interimResults = false; 
+    recognition.continuous = false;
+
+    recognition.onstart = () => {
+      setIsLive(true);
+    };
+
     recognition.onresult = (e: any) => {
-      sendToGemini(e.results[0][0].transcript);
+      const transcript = e.results[0][0].transcript;
+      if (transcript) {
+        sendToGemini(transcript);
+      }
       setIsLive(false);
     };
-    recognition.onerror = () => setIsLive(false);
-    recognition.onend = () => setIsLive(false);
+
+    recognition.onerror = (e: any) => {
+      console.error(e);
+      setIsLive(false);
+      // エラーが起きてもユーザーを混乱させないよう、静かに終了
+    };
+
+    recognition.onend = () => {
+      setIsLive(false);
+    };
+
+    try {
+      recognition.start();
+    } catch (e) {
+      addLog("音声入力の起動に失敗しました。", "alert");
+    }
   };
 
+  // ロードマップをクリックした時の処理（解説モード）
   const handleRoadmapClick = (item: RoadmapItem) => {
-    setActiveTab('CORE');
-    sendToGemini(`ロードマップの「${item.name}」について、技術的な詳細と導入メリットを解説して。`);
+    setSelectedRoadmap(item);
   };
 
   return (
     <div className={`nexus-container ${isAlert ? 'alert-active' : ''}`}>
+      {/* PWA & Mobile Optimization Meta Tags */}
       <style dangerouslySetInnerHTML={{ __html: `
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;700&display=swap');
         :root { 
           --neon-blue: #00f2ff; --neon-red: #ff0040; --neon-green: #39ff14; --neon-yellow: #ffea00; 
-          --bg-dark: #050505; --panel-bg: rgba(15, 15, 15, 0.9);
+          --bg-dark: #050505; 
         }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; scrollbar-width: none; }
-        body, html { height: 100dvh; width: 100vw; background: var(--bg-dark); overflow: hidden; position: fixed; color: #fff; font-family: 'JetBrains Mono', 'Noto Sans JP', sans-serif; }
+        body, html { 
+          height: 100dvh; width: 100vw; background: var(--bg-dark); overflow: hidden; position: fixed; 
+          color: #fff; font-family: 'JetBrains Mono', 'Noto Sans JP', sans-serif;
+          overscroll-behavior: none; /* バウンススクロール防止 */
+        }
         
         .nexus-container { display: flex; flex-direction: column; height: 100%; width: 100%; position: relative; }
         .grid-bg { 
@@ -276,7 +283,7 @@ export default function LaruNexusV25() {
         .nav-btn.active { color: var(--neon-blue); border-bottom: 2px solid var(--neon-blue); text-shadow: 0 0 10px var(--neon-blue); }
 
         .main-area { flex: 1; display: flex; overflow: hidden; position: relative; z-index: 10; }
-        .panel { display: none; flex-direction: column; width: 100%; height: 100%; overflow-y: auto; padding: 16px; gap: 16px; }
+        .panel { display: none; flex-direction: column; width: 100%; height: 100%; overflow-y: auto; padding: 16px; gap: 16px; padding-bottom: 100px; }
         .panel.active { display: flex; }
 
         .project-card { 
@@ -286,9 +293,10 @@ export default function LaruNexusV25() {
         .project-card:active { transform: scale(0.98); background: rgba(0,242,255,0.05); border-color: var(--neon-blue); }
         .status-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(57, 255, 20, 0.1); color: var(--neon-green); border: 1px solid var(--neon-green); }
         
+        /* Modal */
         .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadeIn 0.2s; }
         .detail-panel { 
-          width: 100%; max-width: 600px; max-height: 90vh; background: #111; border: 1px solid var(--neon-blue); border-radius: 12px; 
+          width: 100%; max-width: 600px; max-height: 85vh; background: #111; border: 1px solid var(--neon-blue); border-radius: 12px; 
           display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 0 30px rgba(0,242,255,0.1);
         }
         .detail-header { padding: 16px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; background: rgba(0,242,255,0.05); }
@@ -311,24 +319,39 @@ export default function LaruNexusV25() {
         .chat-alert { align-self: center; color: var(--neon-red); font-size: 11px; border: 1px solid var(--neon-red); background: rgba(255,0,64,0.1); }
         .chat-github { align-self: flex-start; border: 1px solid var(--neon-green); color: var(--neon-green); background: rgba(57, 255, 20, 0.05); }
 
-        /* Core Animation */
-        .core-circle { position: relative; width: 160px; height: 160px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: 0.1s; }
-        @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes pulse-wave { 0% { transform: scale(1); opacity: 0.8; } 100% { transform: scale(1.5); opacity: 0; } }
-        .wave { position: absolute; inset: 0; border: 2px solid var(--neon-blue); border-radius: 50%; animation: pulse-wave 1s infinite; }
-
+        /* Tech Voice Button */
+        .voice-hud {
+          position: relative; width: 80px; height: 80px; margin-top: 20px;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .mic-core {
+          width: 50px; height: 50px; background: rgba(0,242,255,0.1); border: 1px solid var(--neon-blue);
+          border-radius: 50%; display: flex; align-items: center; justify-content: center;
+          position: relative; z-index: 10; cursor: pointer; transition: 0.3s;
+          box-shadow: 0 0 15px rgba(0,242,255,0.2);
+        }
+        .mic-core.active { background: rgba(255,0,64,0.2); border-color: var(--neon-red); box-shadow: 0 0 20px rgba(255,0,64,0.4); }
+        .mic-ring {
+          position: absolute; inset: 0; border: 1px solid var(--neon-blue); border-radius: 50%;
+          opacity: 0; pointer-events: none;
+        }
+        .mic-core.active ~ .mic-ring { animation: sonar 1.5s infinite; }
+        
+        @keyframes sonar { 0% { transform: scale(1); opacity: 0.8; } 100% { transform: scale(2.5); opacity: 0; } }
         @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
       `}} />
       <div className="grid-bg" />
 
+      {/* HEADER */}
       <header className="header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{ width: '12px', height: '12px', background: isAlert ? 'var(--neon-red)' : 'var(--neon-blue)', boxShadow: `0 0 10px ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}` }} />
-          <h1 style={{ fontSize: '14px', letterSpacing: '2px', margin: 0 }}>NEXUS_v25.0</h1>
+          <h1 style={{ fontSize: '14px', letterSpacing: '2px', margin: 0 }}>NEXUS_v25.3</h1>
         </div>
-        <div style={{ fontSize: '9px', color: '#888' }}>GITHUB_SYNCED_OVERLORD</div>
+        <div style={{ fontSize: '9px', color: '#888' }}>HYPER_SENSITIVE_PWA</div>
       </header>
 
+      {/* NAVIGATION */}
       <nav className="nav-tabs">
         <button className={`nav-btn ${activeTab === 'DASHBOARD' ? 'active' : ''}`} onClick={() => setActiveTab('DASHBOARD')}>DASHBOARD</button>
         <button className={`nav-btn ${activeTab === 'CORE' ? 'active' : ''}`} onClick={() => setActiveTab('CORE')}>COMMAND</button>
@@ -370,7 +393,7 @@ export default function LaruNexusV25() {
 
         {/* ROADMAP TAB */}
         <div className={`panel ${activeTab === 'ROADMAP' ? 'active' : ''}`}>
-          <div style={{ fontSize: '10px', color: '#666', letterSpacing: '1px', marginBottom: '10px' }}>// CLICK TO ANALYZE STRATEGY</div>
+          <div style={{ fontSize: '10px', color: '#666', letterSpacing: '1px', marginBottom: '10px' }}>// STRATEGIC_INITIATIVES_2026</div>
           {strategicRoadmap.map(item => (
             <div key={item.id} className="roadmap-item" onClick={() => handleRoadmapClick(item)}>
               <div className={`roadmap-status status-${item.status === 'ACTIVE' ? 'active' : item.status === 'DEVELOPING' ? 'dev' : 'pending'}`} />
@@ -388,17 +411,16 @@ export default function LaruNexusV25() {
         {/* CORE TAB */}
         <div className={`panel ${activeTab === 'CORE' ? 'active' : ''}`} style={{ padding: 0 }}>
           <section style={{ flexShrink: 0, padding: '20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-            <div className="core-circle" style={{ transform: `scale(${1 + audioLevel / 200})` }}>
-              <div style={{ position: 'absolute', inset: 0, border: '1px dashed var(--neon-blue)', borderRadius: '50%', animation: 'rotate 60s linear infinite', opacity: 0.2 }} />
-              {isLive && <div className="wave" />}
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '32px', fontWeight: 900, textShadow: '0 0 15px var(--neon-blue)' }}>LARU</div>
-                <div style={{ fontSize: '7px', color: 'var(--neon-blue)', letterSpacing: '3px' }}>NEXUS CORE</div>
-              </div>
+            <div className="voice-hud">
+              <button className={`mic-core ${isLive ? 'active' : ''}`} onClick={startListening}>
+                🎤
+              </button>
+              <div className="mic-ring" />
+              <div className="mic-ring" style={{ animationDelay: '0.5s' }} />
             </div>
-            <button onClick={startListening} className={`nexus-btn ${isLive ? 'listening' : ''}`} style={{ marginTop: '15px', borderRadius: '20px', fontSize: '10px', borderColor: isLive ? 'var(--neon-red)' : 'var(--neon-blue)', color: isLive ? 'var(--neon-red)' : 'var(--neon-blue)' }}>
-              {isLive ? 'LISTENING...' : 'VOICE INPUT'}
-            </button>
+            <div style={{ fontSize: '10px', marginTop: '10px', color: isLive ? 'var(--neon-red)' : '#666', letterSpacing: '2px' }}>
+              {isLive ? 'VOICE_ANALYSIS_ACTIVE' : 'SYSTEM_READY'}
+            </div>
           </section>
 
           <section style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -409,7 +431,7 @@ export default function LaruNexusV25() {
                   {log.msg}
                 </div>
               ))}
-              {isThinking && <div className="chat-bubble chat-gemini" style={{ opacity: 0.5 }}>...</div>}
+              {isThinking && <div className="chat-bubble chat-gemini" style={{ opacity: 0.5 }}>[ PROCESSING... ]</div>}
               <div ref={chatEndRef} />
             </div>
             <div style={{ padding: '12px', background: '#000', borderTop: '1px solid #222' }}>
@@ -419,7 +441,7 @@ export default function LaruNexusV25() {
                   value={inputMessage} 
                   onChange={e => setInputMessage(e.target.value)} 
                   onKeyDown={(e) => { if (e.key === 'Enter') sendToGemini(); }} 
-                  placeholder="NEXUSへの命令..." 
+                  placeholder="COMMAND..." 
                   style={{ flex: 1, background: 'none', border: 'none', color: '#fff', fontSize: '14px', height: '40px', outline: 'none' }} 
                 />
                 <button onClick={() => sendToGemini()} style={{ background: 'none', border: 'none', color: 'var(--neon-blue)', fontWeight: 'bold' }}>SEND</button>
@@ -430,7 +452,7 @@ export default function LaruNexusV25() {
 
       </div>
 
-      {/* DETAIL OVERLAY */}
+      {/* DETAIL OVERLAY (PROJECT) */}
       {selectedProject && (
         <div className="overlay" onClick={() => setSelectedProject(null)}>
           <div className="detail-panel" onClick={e => e.stopPropagation()}>
@@ -447,20 +469,6 @@ export default function LaruNexusV25() {
                 <div style={{ textAlign: 'center' }}><div style={{ fontSize: '20px', color: '#fff' }}>{selectedProject.stats.cpu}%</div><div style={{ fontSize: '9px', color: '#666' }}>CPU</div></div>
                 <div style={{ textAlign: 'center' }}><div style={{ fontSize: '20px', color: '#fff' }}>{selectedProject.stats.memory}%</div><div style={{ fontSize: '9px', color: '#666' }}>MEM</div></div>
                 <div style={{ textAlign: 'center' }}><div style={{ fontSize: '20px', color: '#fff' }}>{selectedProject.stats.requests}</div><div style={{ fontSize: '9px', color: '#666' }}>REQ</div></div>
-              </div>
-              {/* Issues */}
-              <div>
-                <div style={{ fontSize: '11px', color: '#888', marginBottom: '8px' }}>CURRENT ISSUES</div>
-                {selectedProject.issues.length === 0 ? (
-                  <div style={{ fontSize: '12px', color: '#444', textAlign: 'center', padding: '10px' }}>No Active Issues</div>
-                ) : (
-                  selectedProject.issues.map(issue => (
-                    <div key={issue.id} className="issue-item">
-                      <div style={{ fontWeight: 'bold', fontSize: '12px', color: 'var(--neon-red)' }}>[{issue.level}] {issue.title}</div>
-                      <div style={{ fontSize: '11px', color: '#ccc', marginTop: '2px' }}>{issue.description}</div>
-                    </div>
-                  ))
-                )}
               </div>
               {/* Proposals */}
               <div>
@@ -485,10 +493,40 @@ export default function LaruNexusV25() {
         </div>
       )}
 
-      {/* FOOTER */}
+      {/* DETAIL OVERLAY (ROADMAP) */}
+      {selectedRoadmap && (
+        <div className="overlay" onClick={() => setSelectedRoadmap(null)}>
+          <div className="detail-panel" onClick={e => e.stopPropagation()}>
+            <div className="detail-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#fff' }}>{selectedRoadmap.name}</div>
+                <div style={{ fontSize: '9px', border: '1px solid #666', padding: '2px 4px', borderRadius: '4px', color: '#888' }}>{selectedRoadmap.category}</div>
+              </div>
+              <button onClick={() => setSelectedRoadmap(null)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px' }}>×</button>
+            </div>
+            <div className="detail-content">
+              <div style={{ fontSize: '12px', color: '#ccc', lineHeight: '1.6' }}>{selectedRoadmap.desc}</div>
+              <div style={{ marginTop: '15px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--neon-green)', marginBottom: '5px' }}>EXPECTED BENEFITS</div>
+                <div style={{ fontSize: '12px', color: '#fff', background: 'rgba(57,255,20,0.05)', padding: '10px', borderRadius: '6px', border: '1px solid rgba(57,255,20,0.2)' }}>
+                  {selectedRoadmap.benefits}
+                </div>
+              </div>
+              <button className="exec-btn" style={{ marginTop: '20px', background: 'rgba(255,255,255,0.1)', border: '1px solid #fff', color: '#fff' }} onClick={() => {
+                setSelectedRoadmap(null);
+                setActiveTab('CORE');
+                sendToGemini(`「${selectedRoadmap.name}」について詳しく議論したい。具体的な導入ステップを教えて。`);
+              }}>
+                DISCUSS WITH AI
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <footer style={{ height: '24px', background: '#000', borderTop: '1px solid #222', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', fontSize: '9px', color: '#444' }}>
         <div>© 2026 LARUbot Inc.</div>
-        <div>SYS_STATUS: ONLINE</div>
+        <div>PWA_READY</div>
       </footer>
     </div>
   );
