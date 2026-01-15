@@ -4,13 +4,13 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 
 /**
  * ==============================================================================
- * LARU NEXUS COMMAND SYSTEM v18.8 [AUTONOMOUS_SUPREME]
+ * LARU NEXUS COMMAND SYSTEM v18.9 [AUTONOMOUS_COMPLETE]
  * ------------------------------------------------------------------------------
  * AUTHOR: Takumi Saito (LARUbot President / Komazawa Law Student)
  * DATE: 2026-01-16
  * DESCRIPTION: 
- * 50個の自律監視・修復プロトコルを完全搭載。
- * 外出中の社長に代わり、Gemini 2.5 Flashが24時間体制でコード修正・最適化。
+ * バックエンドからのFunction Calling（自律命令）を受信し、
+ * 実際にモニターの数値や色を物理的に書き換える「神経接続」を完了。
  * ==============================================================================
  */
 
@@ -38,7 +38,7 @@ export default function LaruNexusV18() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isThinking, setIsThinking] = useState(false);
   const [inputMessage, setInputMessage] = useState('');
-  const [isAlert, setIsAlert] = useState(false);
+  const [isAlert, setIsAlert] = useState(false); // 緊急モードフラグ
 
   // --- 自律型モニター：厳選50機能プロトコル ---
   const [services, setServices] = useState<Record<string, ServiceData>>({
@@ -53,7 +53,6 @@ export default function LaruNexusV18() {
     api_updater: { id: 'api_updater', name: 'API更新', status: '最新', cpu: 0, color: '#00f2ff', desc: '最新AIモデルへの自動切り替えを準備' },
     debug_report: { id: 'debug_report', name: '解決日報', status: '作成', cpu: 4, color: '#00f2ff', desc: '夜間の修復内容を朝までにまとめて提示' },
     scaling: { id: 'scaling', name: '負荷分散', status: '監視', cpu: 6, color: '#00f2ff', desc: 'アクセス急増時にサーバーを自動強化' },
-
     // [2] ビジネス・運用監視系 (10)
     rival_watch: { id: 'rival_watch', name: '競合監視', status: '追跡', cpu: 15, color: '#39ff14', desc: '他社サイトの更新を分析し対抗案を提示' },
     user_mind: { id: 'user_mind', name: '心理分析', status: '解析', cpu: 20, color: '#39ff14', desc: '会話からユーザーの満足度を可視化' },
@@ -65,7 +64,6 @@ export default function LaruNexusV18() {
     seo_auto: { id: 'seo_auto', name: '検索対策', status: '向上', cpu: 10, color: '#39ff14', desc: '検索上位に来るよう文章を毎日微調整' },
     law_check: { id: 'law_check', name: '法務監視', status: '安全', cpu: 2, color: '#39ff14', desc: '利用規約が最新の法律に合うかチェック' },
     ai_status: { id: 'ai_status', name: '知能計測', status: '進化', cpu: 30, color: '#39ff14', desc: 'AIがどれだけ賢くなったかを数値化' },
-
     // [3] 社長専用・秘書系 (10)
     kill_switch: { id: 'kill_switch', name: '緊急停止', status: '待機', cpu: 0, color: '#ff006e', desc: '一瞬で全システムを遮断する最終防衛' },
     sch_sync: { id: 'sch_sync', name: '予定連動', status: '同期', cpu: 1, color: '#ff006e', desc: '社長の忙しさに合わせてAIの判断を調整' },
@@ -77,7 +75,6 @@ export default function LaruNexusV18() {
     hand_off: { id: 'hand_off', name: '作業引継', status: '待機', cpu: 2, color: '#ff006e', desc: 'MacからiPhoneへ作業をスムーズに移行' },
     short_cmd: { id: 'short_cmd', name: '時短命令', status: '有効', cpu: 0, color: '#ff006e', desc: 'いつもの作業を一言で終わらせる機能' },
     sim_nexus: { id: 'sim_nexus', name: '未来予測', status: '予測', cpu: 40, color: '#ff006e', desc: '新機能導入後の結果を100通り予測' },
-
     // [4] 将来拡張系 (20)
     srv_move: { id: 'srv_move', name: 'サーバー移転', status: '待機', cpu: 0, color: '#7b2eff', desc: '障害時に自動で別のサーバーへ避難' },
     sns_guard: { id: 'sns_guard', name: 'SNS守護', status: '監視', cpu: 5, color: '#7b2eff', desc: '炎上しそうな発言を事前にブロック' },
@@ -113,6 +110,28 @@ export default function LaruNexusV18() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs, isThinking]);
 
+  // --- 自律神経接続プロトコル (Function Calling Handler) ---
+  const executeAutonomousAction = (action: any) => {
+    const { name, args } = action;
+
+    if (name === 'restart_service') {
+      const targetId = args.serviceId;
+      if (services[targetId]) {
+        setServices(prev => ({
+          ...prev,
+          [targetId]: { ...prev[targetId], status: '復旧', cpu: 5, color: '#00f2ff' } // 青色に戻す
+        }));
+        addLog(`[自律修復] ${targetId.toUpperCase()} の再起動完了。正常値へ復帰。`, 'sec');
+      }
+    } else if (name === 'activate_emergency_mode') {
+      setIsAlert(true);
+      addLog(`[緊急事態] レベル${args.level}の警戒モードを発令。全システム防御態勢。`, 'sec');
+      setTimeout(() => setIsAlert(false), 5000); // 5秒後に解除
+    } else if (name === 'execute_autonomous_repair') {
+      addLog(`[自律スキャン] ${args.target} のコード修正パッチを適用中... 完了。`, 'sys');
+    }
+  };
+
   // --- Gemini 2.5 Flash 実行エンジン ---
   const sendToGemini = async (text?: string) => {
     const messageToSend = text || inputMessage;
@@ -123,15 +142,24 @@ export default function LaruNexusV18() {
     setInputMessage('');
 
     try {
-      const res = await fetch(`/api/gemini?v=18.8&t=${Date.now()}`, {
+      const res = await fetch(`/api/gemini?v=18.9&t=${Date.now()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: messageToSend }),
         cache: 'no-store'
       });
       const data = await res.json();
+      
       if (!res.ok) throw new Error(data.details || data.error || `ERROR_${res.status}`);
+
+      // 1. テキストがあれば表示
       if (data.text) addLog(data.text, 'gemini');
+
+      // 2. 自律命令(Function Call)があれば実行
+      if (data.functionCalls && data.functionCalls.length > 0) {
+        data.functionCalls.forEach((call: any) => executeAutonomousAction(call));
+      }
+
     } catch (error: any) {
       addLog(`通信途絶: 命令を受理できませんでした。`, "sec");
       addLog(`理由: ${error.message.toUpperCase()}`, "sys");
@@ -163,18 +191,33 @@ export default function LaruNexusV18() {
       if (isLive) setAudioLevel(Math.random() * 100);
       setServices(prev => {
         const next = { ...prev };
-        let anyCritical = false;
-        Object.keys(next).forEach(key => {
-          const drift = Math.random() * 4 - 2;
-          next[key].cpu = Math.max(1, Math.min(99, next[key].cpu + drift));
-          if (next[key].cpu > 90) anyCritical = true;
-        });
-        setIsAlert(anyCritical);
+        // 自律変動シミュレーション（アラート時は変動停止）
+        if (!isAlert) {
+          Object.keys(next).forEach(key => {
+            const drift = Math.random() * 4 - 2;
+            // 異常検知シミュレーション: たまに負荷を上げる
+            if (Math.random() > 0.98) next[key].cpu = 95;
+            
+            next[key].cpu = Math.max(1, Math.min(99, next[key].cpu + drift));
+            
+            // 状態による色の自動変更
+            if (next[key].cpu > 90) {
+              next[key].color = '#ff0040'; // 赤
+              next[key].status = '危険';
+            } else if (next[key].cpu > 70) {
+               next[key].color = '#ffea00'; // 黄
+               next[key].status = '注意';
+            } else {
+               next[key].color = '#00f2ff'; // 青 (デフォルトに戻る)
+               next[key].status = '正常';
+            }
+          });
+        }
         return next;
       });
-    }, 400);
+    }, 1000); // 1秒ごとに更新
     return () => clearInterval(interval);
-  }, [isLive]);
+  }, [isLive, isAlert]);
 
   return (
     <div className={`nexus-container ${isAlert ? 'alert-active' : ''}`}>
@@ -193,8 +236,8 @@ export default function LaruNexusV18() {
 
         .grid-bg { position: fixed; inset: 0; background-image: linear-gradient(rgba(0, 242, 255, 0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 242, 255, 0.02) 1px, transparent 1px); background-size: 30px 30px; z-index: 0; pointer-events: none; }
         
-        @keyframes pulse-red { 50% { box-shadow: inset 0 0 80px rgba(255,0,64,0.1); } }
-        .alert-active { animation: pulse-red 1.5s infinite; }
+        @keyframes pulse-red { 0% { box-shadow: inset 0 0 0 rgba(255,0,64,0); } 50% { box-shadow: inset 0 0 100px rgba(255,0,64,0.3); } 100% { box-shadow: inset 0 0 0 rgba(255,0,64,0); } }
+        .alert-active { animation: pulse-red 1s infinite; border: 2px solid var(--neon-red); }
 
         .panel-content { flex-direction: column; height: 100%; width: 100%; overflow: hidden; position: relative; z-index: 10; display: none; }
         .panel-content.active { display: flex; }
@@ -222,7 +265,6 @@ export default function LaruNexusV18() {
         @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes blink { 50% { opacity: 0.3; } }
 
-        /* Mobile Adjustments */
         @media (max-width: 768px) {
           .core-circle { width: 140px; height: 140px; }
           .core-circle div:first-child { font-size: 28px !important; }
@@ -236,7 +278,7 @@ export default function LaruNexusV18() {
           <div style={{ width: '18px', height: '18px', border: `2px solid ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}`, position: 'relative' }}>
             <div style={{ position: 'absolute', inset: '20%', background: isAlert ? 'var(--neon-red)' : 'var(--neon-blue)', boxShadow: `0 0 8px ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}` }} />
           </div>
-          <h1 style={{ fontSize: '12px', letterSpacing: '2px', margin: 0, fontWeight: 700 }}>NEXUS_v18.8</h1>
+          <h1 style={{ fontSize: '12px', letterSpacing: '2px', margin: 0, fontWeight: 700 }}>NEXUS_v18.9</h1>
         </div>
         <div style={{ fontSize: '8px', color: isAlert ? 'var(--neon-red)' : 'var(--neon-green)', fontFamily: 'JetBrains Mono' }}>[ 2.5_FLASH_AUTONOMOUS ]</div>
       </header>
@@ -257,7 +299,7 @@ export default function LaruNexusV18() {
 
       <div className="nexus-main" style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative', width: '100%', alignItems: 'center', justifyContent: 'center' }}>
         
-        {/* MONITOR PANEL (50 Functions Grid) */}
+        {/* MONITOR PANEL */}
         <aside className={`panel-content ${activeTab === 'MONITOR' ? 'active' : ''}`} style={{ padding: '16px', overflowY: 'auto', background: 'rgba(0,0,0,0.85)' }}>
           <div style={{ fontSize: '9px', color: '#444', marginBottom: '15px', letterSpacing: '2px', textAlign: 'center' }}>// 50_SYSTEM_AUTONOMOUS_MONITOR</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(145px, 1fr))', gap: '8px', width: '100%', maxWidth: '1200px', margin: '0 auto' }}>
@@ -265,7 +307,7 @@ export default function LaruNexusV18() {
               <div key={s.id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', padding: '10px', borderRadius: '2px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '10px' }}>
                   <span style={{ color: s.color, fontWeight: 'bold' }}>{s.name}</span>
-                  <span style={{ color: '#666', fontSize: '8px' }}>{s.status}</span>
+                  <span style={{ color: s.cpu > 90 ? 'var(--neon-red)' : '#666', fontSize: '8px' }}>{s.status}</span>
                 </div>
                 <div style={{ fontSize: '8px', color: '#444', marginBottom: '6px', height: '20px', overflow: 'hidden' }}>{s.desc}</div>
                 <div style={{ height: '2px', background: '#111' }}><div style={{ width: `${s.cpu}%`, height: '100%', background: s.color, transition: '0.4s' }} /></div>
@@ -321,7 +363,7 @@ export default function LaruNexusV18() {
 
       <footer style={{ height: '20px', background: '#000', borderTop: '1px solid #0a0a0a', display: 'flex', alignItems: 'center', fontSize: '7px', color: '#222', justifyContent: 'space-between', padding: '0 10px', zIndex: 1100 }}>
         <div>© 2026 LARUbot // PRESIDENT TAKUMI SAITO</div>
-        <div style={{ color: 'var(--neon-green)', opacity: 0.4 }}>SYSTEM_STABLE_v18.8</div>
+        <div style={{ color: 'var(--neon-green)', opacity: 0.4 }}>SYSTEM_STABLE_v18.9</div>
       </footer>
     </div>
   );
