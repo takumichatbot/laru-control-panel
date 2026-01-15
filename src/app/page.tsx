@@ -4,14 +4,13 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 
 /**
  * ==============================================================================
- * LARU NEXUS COMMAND SYSTEM v27.0 [CUSTOMIZABLE_ENTITY]
+ * LARU NEXUS COMMAND SYSTEM v27.1 [PERSONA_MORPH_UPDATE]
  * ------------------------------------------------------------------------------
  * AUTHOR: Takumi Saito (LARUbot President)
  * DATE: 2026-01-16
  * DESCRIPTION: 
- * AIの人格（性別・性格）設定機能を追加。
- * マイクアイコンを「反応するサイバーフェイス」に刷新。
- * PWAメタタグを強化し、ブラウザUIを排除した没入体験を提供。
+ * AIペルソナの自由記述設定、性別による顔グラフィックの変更(Humanized Cyber Face)、
+ * 設定パネルのUI修正、音声ピッチの最適化を実装。
  * ==============================================================================
  */
 
@@ -39,13 +38,21 @@ class SoundFX {
     const now = this.ctx.currentTime;
     
     if (type === 'click') {
-      osc.type = 'sine'; osc.frequency.setValueAtTime(800, now); osc.frequency.exponentialRampToValueAtTime(300, now + 0.1); gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1); osc.start(now); osc.stop(now + 0.1);
+      osc.type = 'sine'; osc.frequency.setValueAtTime(800, now); osc.frequency.exponentialRampToValueAtTime(300, now + 0.1);
+      gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+      osc.start(now); osc.stop(now + 0.1);
     } else if (type === 'success') {
-      osc.type = 'triangle'; osc.frequency.setValueAtTime(400, now); osc.frequency.linearRampToValueAtTime(1200, now + 0.1); gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.3); osc.start(now); osc.stop(now + 0.3);
+      osc.type = 'triangle'; osc.frequency.setValueAtTime(400, now); osc.frequency.linearRampToValueAtTime(1200, now + 0.1);
+      gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.3);
+      osc.start(now); osc.stop(now + 0.3);
     } else if (type === 'alert') {
-      osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, now); osc.frequency.linearRampToValueAtTime(100, now + 0.3); gain.gain.setValueAtTime(0.15, now); gain.gain.linearRampToValueAtTime(0, now + 0.3); osc.start(now); osc.stop(now + 0.3);
+      osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, now); osc.frequency.linearRampToValueAtTime(100, now + 0.3);
+      gain.gain.setValueAtTime(0.15, now); gain.gain.linearRampToValueAtTime(0, now + 0.3);
+      osc.start(now); osc.stop(now + 0.3);
     } else if (type === 'toggle') {
-      osc.type = 'square'; osc.frequency.setValueAtTime(600, now); gain.gain.setValueAtTime(0.05, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05); osc.start(now); osc.stop(now + 0.05);
+      osc.type = 'square'; osc.frequency.setValueAtTime(600, now); 
+      gain.gain.setValueAtTime(0.05, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+      osc.start(now); osc.stop(now + 0.05);
     }
   }
 }
@@ -81,12 +88,12 @@ export default function LaruNexusV27() {
   // --- AI Personality Settings ---
   const [showSettings, setShowSettings] = useState(false);
   const [aiGender, setAiGender] = useState<'male' | 'female'>('female');
-  const [aiPersonality, setAiPersonality] = useState<'cool' | 'warm'>('cool');
+  const [aiPersona, setAiPersona] = useState<string>('あなたは優秀なAI司令官です。冷静かつ的確に、短い言葉で報告してください。');
 
-  // --- 実プロジェクト資産データ (初期値) ---
+  // --- 実プロジェクト資産データ ---
   const initialProjects: Record<string, ProjectData> = {
     laru_nexus: { 
-      id: 'laru_nexus', name: 'LaruNEXUS', repoName: 'laru_nexus_core', url: 'nexus.larubot.com', status: 'WAITING', latency: 0, region: 'Tokyo (Render)', version: 'v27.0', lastDeploy: '2026-01-16 14:00',
+      id: 'laru_nexus', name: 'LaruNEXUS', repoName: 'laru_nexus_core', url: 'nexus.larubot.com', status: 'WAITING', latency: 0, region: 'Tokyo (Render)', version: 'v27.1', lastDeploy: '2026-01-16 15:00',
       stats: { cpu: 15, memory: 55, requests: 300, errors: 0 }, issues: [],
       proposals: [{ id: 'p_ln_1', type: 'FEATURE', title: '脳波コントロール連携の実装', impact: '操作性革命 (ハンズフリー)', cost: 'High' }]
     },
@@ -123,7 +130,7 @@ export default function LaruNexusV27() {
         try {
           const settings = JSON.parse(savedSettings);
           setAiGender(settings.gender || 'female');
-          setAiPersonality(settings.personality || 'cool');
+          setAiPersona(settings.persona || 'あなたは優秀なAI司令官です。');
         } catch(e){}
       }
       window.speechSynthesis.getVoices();
@@ -133,9 +140,9 @@ export default function LaruNexusV27() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       if (Object.keys(projects).length > 0) localStorage.setItem('laru_nexus_v27_projects', JSON.stringify(projects));
-      localStorage.setItem('laru_nexus_v27_settings', JSON.stringify({ gender: aiGender, personality: aiPersonality }));
+      localStorage.setItem('laru_nexus_v27_settings', JSON.stringify({ gender: aiGender, persona: aiPersona }));
     }
-  }, [projects, aiGender, aiPersonality]);
+  }, [projects, aiGender, aiPersona]);
 
   // --- リアル死活監視 ---
   useEffect(() => {
@@ -157,7 +164,6 @@ export default function LaruNexusV27() {
     return () => clearInterval(interval);
   }, [projects]);
 
-  // --- ログ追加 & Haptics ---
   const addLog = useCallback((msg: string, type: 'user' | 'gemini' | 'sys' | 'sec' | 'alert' | 'github' = 'sys') => {
     const time = new Date().toLocaleTimeString('ja-JP', { hour12: false });
     const id = Math.random().toString(36).substr(2, 9);
@@ -169,7 +175,7 @@ export default function LaruNexusV27() {
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs, isThinking]);
 
-  // --- 高品質音声合成 (Gender/Personality Tuned) ---
+  // --- 高品質音声合成 (Gender Tuned) ---
   const speak = (text: string) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
@@ -177,40 +183,30 @@ export default function LaruNexusV27() {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'ja-JP';
     
-    // 性別によるピッチ調整
-    // 男性: 0.8 (低め), 女性: 1.2 (高め)
-    utterance.pitch = aiGender === 'male' ? 0.8 : 1.2;
-    
-    // 性格による速度調整
-    // COOL: 1.0 (標準), WARM: 1.1 (少し速め・軽快)
-    utterance.rate = aiPersonality === 'cool' ? 1.0 : 1.1;
+    // 性別によるピッチ調整 (自然な範囲で)
+    utterance.pitch = aiGender === 'male' ? 0.9 : 1.1; 
+    utterance.rate = 1.0; 
 
     const voices = window.speechSynthesis.getVoices();
     const jpVoices = voices.filter(v => v.lang === 'ja-JP');
     
-    // 優先順位: Google Neural -> 最初の日本語音声
+    // Google Neural系があれば優先、なければOS標準
     let targetVoice = jpVoices.find(v => v.name.includes('Google') && v.name.includes('Neural')) || jpVoices[0];
     
     if (targetVoice) utterance.voice = targetVoice;
     window.speechSynthesis.speak(utterance);
   };
 
-  // --- 音声入力アニメーション ---
-  useEffect(() => {
-    if (!isLive) { setAudioLevel(0); return; }
-    const interval = setInterval(() => setAudioLevel(Math.random() * 100), 50);
-    return () => clearInterval(interval);
-  }, [isLive]);
+  useEffect(() => { if (!isLive) { setAudioLevel(0); return; } const interval = setInterval(() => setAudioLevel(Math.random() * 100), 50); return () => clearInterval(interval); }, [isLive]);
 
   // --- Function Calling Handler ---
   const executeAutonomousAction = useCallback((action: any) => {
     const { name, args } = action;
     if (name === 'restart_service') {
-      const targetId = args.serviceId;
-      addLog(`[統制命令] ${targetId.toUpperCase()} の再起動を完了。`, 'sec');
-      speak(`${targetId}を再起動しました。`);
+      addLog(`[統制命令] ${args.serviceId.toUpperCase()} の再起動を完了。`, 'sec');
+      speak(`${args.serviceId}を再起動しました。`);
     } else if (name === 'execute_proposal') {
-      addLog(`[承認] プロジェクト: ${args.projectName} / 施策: ${args.actionType} のデプロイプロセスを開始しました。`, 'sec');
+      addLog(`[承認] ${args.projectName} / ${args.actionType} のデプロイを開始。`, 'sec');
       speak(`${args.actionType}のデプロイを開始します。`);
       setTimeout(() => {
         setProjects(prev => {
@@ -218,17 +214,13 @@ export default function LaruNexusV27() {
           Object.keys(next).forEach(key => {
             const proj = next[key];
             proj.proposals = proj.proposals.filter(p => !p.title.includes(args.actionType) && !args.actionType.includes(p.title));
-            proj.issues = proj.issues.filter(i => !i.description.includes(args.actionType));
             if (proj.name === args.projectName) { proj.stats.errors = 0; proj.stats.cpu = 5; }
           });
           return next;
         });
-        addLog(`[完了] ${args.actionType} の実装が完了しました。システムは正常稼働中です。`, 'sys');
-        speak(`実装が完了しました。システムは正常です。`);
+        addLog(`[完了] ${args.actionType} の実装完了。正常稼働中。`, 'sys');
+        speak(`実装が完了しました。`);
       }, 3000);
-    } else if (name === 'execute_autonomous_repair') {
-      addLog(`[修復] ${args.target} の自動修復パッチを適用しました。`, 'sys');
-      speak(`自動修復パッチを適用しました。`);
     } else if (name === 'activate_emergency_mode') {
       setIsAlert(true);
       addLog(`[緊急] レベル${args.level} 警戒態勢。`, 'sec');
@@ -246,11 +238,14 @@ export default function LaruNexusV27() {
     setInputMessage('');
     sfx.play('click');
 
+    // ペルソナ設定を付与して送信
+    const promptWithPersona = `[System: ${aiPersona}] User: ${messageToSend}`;
+
     try {
-      const res = await fetch(`/api/gemini?v=27.0&t=${Date.now()}`, {
+      const res = await fetch(`/api/gemini?v=27.1&t=${Date.now()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: messageToSend }),
+        body: JSON.stringify({ message: promptWithPersona }),
         cache: 'no-store'
       });
       const data = await res.json();
@@ -292,51 +287,67 @@ export default function LaruNexusV27() {
   const handleTabChange = (tab: any) => { setActiveTab(tab); sfx.play('click'); };
   const handleRoadmapClick = (item: RoadmapItem) => { setSelectedRoadmap(item); sfx.play('click'); };
 
-  // Face Icon Component
-  const CyberFace = ({ active, level }: { active: boolean, level: number }) => (
-    <svg width="60" height="60" viewBox="0 0 100 100" fill="none" stroke={active ? "var(--neon-red)" : "var(--neon-blue)"} strokeWidth="2" style={{ transition: '0.3s' }}>
-      {/* Face Outline */}
-      <path d="M20,30 Q10,50 20,70 L40,90 L60,90 L80,70 Q90,50 80,30 L60,10 L40,10 Z" fill="none" />
-      {/* Eyes */}
-      <path d="M30,40 L40,40" strokeWidth="3" />
-      <path d="M60,40 L70,40" strokeWidth="3" />
-      {/* Mouth (Animates with volume) */}
-      <path d={`M35,${70 + (active ? Math.sin(Date.now() / 100) * (level / 10) : 0)} Q50,${80 + (active ? level / 5 : 0)} 65,${70 + (active ? Math.sin(Date.now() / 100) * (level / 10) : 0)}`} strokeWidth="2" />
-      {/* Cyber Accents */}
-      <path d="M10,50 L20,50" opacity="0.5" />
-      <path d="M80,50 L90,50" opacity="0.5" />
-    </svg>
-  );
+  // --- Humanized Cyber Face (SVG) ---
+  const HumanFace = ({ gender, active, level }: { gender: 'male' | 'female', active: boolean, level: number }) => {
+    const mouthOpen = active ? Math.min(20, level / 3) : 0;
+    
+    if (gender === 'male') {
+      return (
+        <svg width="70" height="70" viewBox="0 0 100 100" fill="none" stroke={active ? "var(--neon-red)" : "var(--neon-blue)"} strokeWidth="1.5" style={{ transition: '0.3s' }}>
+          {/* Male: Sharp Jaw, Straight Brows */}
+          <path d="M25,30 L20,50 L35,85 L65,85 L80,50 L75,30" strokeLinecap="round" /> {/* Face Shape */}
+          <path d="M20,50 L10,40" opacity="0.5" /> <path d="M80,50 L90,40" opacity="0.5" /> {/* Ears */}
+          <path d="M30,40 L45,42" strokeWidth="2" /> <path d="M55,42 L70,40" strokeWidth="2" /> {/* Eyes/Brows */}
+          <line x1="50" y1="45" x2="50" y2="60" strokeWidth="1" opacity="0.7" /> {/* Nose */}
+          {/* Mouth (Animates) */}
+          <path d={`M35,70 Q50,${70 + mouthOpen} 65,70`} strokeWidth="2" />
+          <circle cx="50" cy="50" r="45" stroke="rgba(0,242,255,0.1)" strokeWidth="1" />
+        </svg>
+      );
+    } else {
+      return (
+        <svg width="70" height="70" viewBox="0 0 100 100" fill="none" stroke={active ? "var(--neon-red)" : "var(--neon-blue)"} strokeWidth="1.5" style={{ transition: '0.3s' }}>
+          {/* Female: Soft Jaw, Curved Brows, Big Eyes */}
+          <path d="M20,30 Q15,50 35,85 Q50,95 65,85 Q85,50 80,30" strokeLinecap="round" /> {/* Face Shape */}
+          <path d="M30,42 Q37,35 45,42" strokeWidth="2" /> <path d="M55,42 Q63,35 70,42" strokeWidth="2" /> {/* Eyes */}
+          <circle cx="37" cy="45" r="2" fill={active ? "var(--neon-red)" : "var(--neon-blue)"} /> <circle cx="63" cy="45" r="2" fill={active ? "var(--neon-red)" : "var(--neon-blue)"} /> {/* Pupils */}
+          <line x1="50" y1="50" x2="50" y2="55" strokeWidth="1" opacity="0.7" /> {/* Nose */}
+          {/* Mouth (Animates) */}
+          <path d={`M40,70 Q50,${70 + mouthOpen} 60,70`} strokeWidth="2" />
+          <circle cx="50" cy="50" r="45" stroke="rgba(0,242,255,0.1)" strokeWidth="1" />
+        </svg>
+      );
+    }
+  };
 
   return (
     <div className={`nexus-container ${isAlert ? 'alert-active' : ''}`}>
-      {/* Meta Tags for PWA */}
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
 
       <style dangerouslySetInnerHTML={{ __html: `
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;700&display=swap');
         :root { --neon-blue: #00f2ff; --neon-red: #ff0040; --neon-green: #39ff14; --neon-yellow: #ffea00; --bg-dark: #050505; }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; scrollbar-width: none; }
-        body, html { height: 100dvh; width: 100vw; background: var(--bg-dark); overflow: hidden; position: fixed; color: #fff; font-family: 'JetBrains Mono', 'Noto Sans JP'; overscroll-behavior: none; }
+        body, html { height: 100dvh; width: 100vw; background: var(--bg-dark); overflow: hidden; position: fixed; color: #fff; font-family: 'JetBrains Mono', 'Noto Sans JP'; }
         .nexus-container { display: flex; flex-direction: column; height: 100%; width: 100%; position: relative; }
         .grid-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.3; background-image: linear-gradient(rgba(0,242,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,242,255,0.05) 1px, transparent 1px); background-size: 40px 40px; }
         .header { height: 50px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; background: rgba(0,0,0,0.8); border-bottom: 1px solid rgba(255,255,255,0.1); z-index: 50; }
         .nav-tabs { display: flex; background: #000; border-bottom: 1px solid #222; z-index: 50; }
-        .nav-btn { flex: 1; padding: 12px 0; background: none; border: none; color: #666; font-size: 10px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .nav-btn { flex: 1; padding: 12px 0; background: none; border: none; color: #666; font-size: 10px; font-weight: bold; cursor: pointer; }
         .nav-btn.active { color: var(--neon-blue); border-bottom: 2px solid var(--neon-blue); }
         .main-area { flex: 1; display: flex; overflow: hidden; position: relative; z-index: 10; }
         .panel { display: none; flex-direction: column; width: 100%; height: 100%; overflow-y: auto; padding: 16px; gap: 16px; padding-bottom: 100px; }
         .panel.active { display: flex; }
-        .project-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 16px; cursor: pointer; transition: 0.2s; }
-        .project-card:active { transform: scale(0.98); background: rgba(0,242,255,0.05); border-color: var(--neon-blue); }
-        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadeIn 0.2s; }
+        .project-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 16px; cursor: pointer; }
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .detail-panel { width: 100%; max-width: 600px; max-height: 85vh; background: #111; border: 1px solid var(--neon-blue); border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; }
+        .detail-header { padding: 16px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
         .detail-content { padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
-        .chat-bubble { max-width: 85%; padding: 10px 14px; border-radius: 12px; font-size: 13px; margin-bottom: 10px; word-wrap: break-word; }
+        .roadmap-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border-bottom: 1px solid #222; cursor: pointer; }
+        .chat-bubble { max-width: 85%; padding: 10px 14px; border-radius: 12px; font-size: 13px; margin-bottom: 10px; }
         .chat-user { align-self: flex-end; background: rgba(0,242,255,0.1); border: 1px solid rgba(0,242,255,0.3); }
         .chat-gemini { align-self: flex-start; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); }
         
@@ -345,12 +356,13 @@ export default function LaruNexusV27() {
         .face-container { width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); border-radius: 50%; box-shadow: 0 0 20px rgba(0,242,255,0.1); }
         
         /* Settings Modal */
-        .settings-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-        .toggle-group { display: flex; gap: 5px; background: #222; padding: 2px; border-radius: 4px; }
-        .toggle-btn { padding: 5px 10px; font-size: 10px; border: none; background: none; color: #666; cursor: pointer; border-radius: 2px; }
-        .toggle-btn.active { background: var(--neon-blue); color: #000; font-weight: bold; }
-
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .settings-group { margin-bottom: 20px; }
+        .settings-label { font-size: 12px; color: var(--neon-blue); margin-bottom: 8px; display: block; }
+        .toggle-row { display: flex; gap: 10px; }
+        .toggle-btn { flex: 1; padding: 8px; border: 1px solid #333; background: #111; color: #666; border-radius: 4px; font-size: 12px; cursor: pointer; }
+        .toggle-btn.active { border-color: var(--neon-blue); color: var(--neon-blue); background: rgba(0,242,255,0.1); }
+        .persona-input { width: 100%; height: 80px; background: #222; border: 1px solid #333; color: #fff; padding: 10px; font-size: 12px; border-radius: 4px; resize: none; }
+        .persona-input:focus { border-color: var(--neon-blue); outline: none; }
       `}} />
       <div className="grid-bg" />
 
@@ -358,11 +370,9 @@ export default function LaruNexusV27() {
       <header className="header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{ width: '12px', height: '12px', background: isAlert ? 'var(--neon-red)' : 'var(--neon-blue)', boxShadow: `0 0 10px ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}` }} />
-          <h1 style={{ fontSize: '14px', letterSpacing: '2px', margin: 0 }}>NEXUS_v27.0</h1>
+          <h1 style={{ fontSize: '14px', letterSpacing: '2px', margin: 0 }}>NEXUS_v27.1</h1>
         </div>
-        <div style={{ display: 'flex', gap: '15px' }}>
-          <button onClick={() => setShowSettings(true)} style={{ background: 'none', border: 'none', color: '#888', fontSize: '16px', cursor: 'pointer' }}>⚙️</button>
-        </div>
+        <button onClick={() => setShowSettings(true)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '18px', cursor: 'pointer' }}>⚙️</button>
       </header>
 
       {/* NAVIGATION */}
@@ -372,7 +382,6 @@ export default function LaruNexusV27() {
         <button className={`nav-btn ${activeTab === 'ROADMAP' ? 'active' : ''}`} onClick={() => handleTabChange('ROADMAP')}>ROADMAP</button>
       </nav>
 
-      {/* MAIN CONTENT */}
       <div className="main-area">
         {/* DASHBOARD */}
         <div className={`panel ${activeTab === 'DASHBOARD' ? 'active' : ''}`}>
@@ -383,7 +392,7 @@ export default function LaruNexusV27() {
                 <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--neon-blue)' }}>{p.name}</div>
                 <div className="status-badge" style={{ color: p.status === 'ONLINE' ? 'var(--neon-green)' : '#666' }}>{p.status}</div>
               </div>
-              <div style={{ fontSize: '11px', color: '#aaa', marginTop: '5px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px', fontSize: '11px', color: '#aaa', marginTop: '5px' }}>
                 <div>Region: {p.region}</div>
                 <div>Latency: <span style={{ color: p.latency > 500 ? 'var(--neon-red)' : '#fff' }}>{p.latency}ms</span></div>
               </div>
@@ -414,7 +423,7 @@ export default function LaruNexusV27() {
           <section style={{ padding: '20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
             <div className="voice-hud" onClick={startListening}>
               <div className="face-container">
-                <CyberFace active={isLive} level={audioLevel} />
+                <HumanFace gender={aiGender} active={isLive} level={audioLevel} />
               </div>
             </div>
             <div style={{ fontSize: '10px', marginTop: '10px', color: isLive ? 'var(--neon-red)' : '#666' }}>{isLive ? 'LISTENING...' : 'READY'}</div>
@@ -438,9 +447,10 @@ export default function LaruNexusV27() {
           <div className="detail-panel" onClick={e => e.stopPropagation()}>
             <div className="detail-header">
               <div>
-                <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--neon-blue)' }}>{selectedProject.name}</div>
-                <button onClick={() => setSelectedProject(null)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px' }}>×</button>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--neon-blue)' }}>{selectedProject.name}</div>
+                <div style={{ fontSize: '10px', color: '#888' }}>{selectedProject.url}</div>
               </div>
+              <button onClick={() => setSelectedProject(null)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px' }}>×</button>
             </div>
             <div className="detail-content">
               {/* Stats */}
@@ -460,9 +470,7 @@ export default function LaruNexusV27() {
                     </div>
                     <div style={{ fontSize: '11px', color: '#aaa' }}>Impact: {prop.impact}</div>
                     <button className="exec-btn" onClick={() => {
-                      setSelectedProject(null);
-                      setActiveTab('CORE');
-                      sendToGemini(`提案実行: ${selectedProject.name} の「${prop.title}」を実行せよ。`);
+                      setSelectedProject(null); setActiveTab('CORE'); sendToGemini(`提案実行: ${selectedProject.name} の「${prop.title}」を実行せよ。`);
                     }}>EXECUTE</button>
                   </div>
                 ))}
@@ -487,47 +495,46 @@ export default function LaruNexusV27() {
               <div style={{ fontSize: '12px', color: '#ccc', lineHeight: '1.6' }}>{selectedRoadmap.desc}</div>
               <div style={{ marginTop: '15px' }}>
                 <div style={{ fontSize: '11px', color: 'var(--neon-green)', marginBottom: '5px' }}>EXPECTED BENEFITS</div>
-                <div style={{ fontSize: '12px', color: '#fff', background: 'rgba(57,255,20,0.05)', padding: '10px', borderRadius: '6px', border: '1px solid rgba(57,255,20,0.2)' }}>
-                  {selectedRoadmap.benefits}
-                </div>
+                <div style={{ fontSize: '12px', color: '#fff', background: 'rgba(57,255,20,0.05)', padding: '10px', borderRadius: '6px', border: '1px solid rgba(57,255,20,0.2)' }}>{selectedRoadmap.benefits}</div>
               </div>
               <button className="exec-btn" style={{ marginTop: '20px', background: 'rgba(255,255,255,0.1)', border: '1px solid #fff', color: '#fff' }} onClick={() => {
-                setSelectedRoadmap(null);
-                setActiveTab('CORE');
-                sendToGemini(`「${selectedRoadmap.name}」について詳しく議論したい。具体的な導入ステップを教えて。`);
-              }}>
-                DISCUSS WITH AI
-              </button>
+                setSelectedRoadmap(null); setActiveTab('CORE'); sendToGemini(`「${selectedRoadmap.name}」について詳しく議論したい。具体的な導入ステップを教えて。`);
+              }}>DISCUSS WITH AI</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* SETTINGS MODAL */}
+      {/* AI SETTINGS MODAL (Fixed Layout) */}
       {showSettings && (
         <div className="overlay" onClick={() => setShowSettings(false)}>
           <div className="detail-panel" onClick={e => e.stopPropagation()}>
             <div className="detail-header">
               <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#fff' }}>AI SETTINGS</div>
-              <button onClick={() => setShowSettings(false)} style={{ background: 'none', border: 'none', color: '#fff' }}>×</button>
+              <button onClick={() => setShowSettings(false)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px' }}>×</button>
             </div>
             <div className="detail-content">
-              <div className="settings-row">
-                <span style={{ fontSize: '12px', color: '#ccc' }}>VOICE GENDER</span>
-                <div className="toggle-group">
-                  <button className={`toggle-btn ${aiGender === 'male' ? 'active' : ''}`} onClick={() => { setAiGender('male'); sfx.play('toggle'); }}>MALE</button>
-                  <button className={`toggle-btn ${aiGender === 'female' ? 'active' : ''}`} onClick={() => { setAiGender('female'); sfx.play('toggle'); }}>FEMALE</button>
+              
+              <div className="settings-group">
+                <span className="settings-label">VOICE GENDER</span>
+                <div className="toggle-row">
+                  <button className={`toggle-btn ${aiGender === 'male' ? 'active' : ''}`} onClick={() => { setAiGender('male'); sfx.play('toggle'); }}>MALE (LOW)</button>
+                  <button className={`toggle-btn ${aiGender === 'female' ? 'active' : ''}`} onClick={() => { setAiGender('female'); sfx.play('toggle'); }}>FEMALE (HIGH)</button>
                 </div>
               </div>
-              <div className="settings-row">
-                <span style={{ fontSize: '12px', color: '#ccc' }}>PERSONALITY</span>
-                <div className="toggle-group">
-                  <button className={`toggle-btn ${aiPersonality === 'cool' ? 'active' : ''}`} onClick={() => { setAiPersonality('cool'); sfx.play('toggle'); }}>COOL</button>
-                  <button className={`toggle-btn ${aiPersonality === 'warm' ? 'active' : ''}`} onClick={() => { setAiPersonality('warm'); sfx.play('toggle'); }}>WARM</button>
-                </div>
+
+              <div className="settings-group">
+                <span className="settings-label">PERSONA DEFINITION (TEXT)</span>
+                <textarea 
+                  className="persona-input" 
+                  value={aiPersona} 
+                  onChange={(e) => setAiPersona(e.target.value)} 
+                  placeholder="例: あなたはクールなエージェントです。敬語は使わず、端的に報告してください。"
+                />
               </div>
-              <div style={{ fontSize: '10px', color: '#666', marginTop: '10px' }}>
-                ※ Changes will be applied to the next voice response.
+
+              <div style={{ fontSize: '10px', color: '#666', marginTop: '10px', textAlign: 'center' }}>
+                ※ Settings saved automatically.
               </div>
             </div>
           </div>
