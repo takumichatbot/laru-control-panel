@@ -4,13 +4,14 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 
 /**
  * ==============================================================================
- * LARU NEXUS COMMAND SYSTEM v27.1 [PERSONA_MORPH_UPDATE]
+ * LARU NEXUS COMMAND SYSTEM v27.1 [FINAL_SYNC_VERSION]
  * ------------------------------------------------------------------------------
  * AUTHOR: Takumi Saito (LARUbot President)
  * DATE: 2026-01-16
  * DESCRIPTION: 
- * AIペルソナの自由記述設定、性別による顔グラフィックの変更(Humanized Cyber Face)、
- * 設定パネルのUI修正、音声ピッチの最適化を実装。
+ * ダッシュボードデータの完全復元。
+ * 顔グラフィックを「美しいローポリゴンメッシュ」に刷新(SVG)。
+ * AIペルソナの自由記述設定、スマホ音声再生の強制アンロック機能を実装。
  * ==============================================================================
  */
 
@@ -18,17 +19,24 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 class SoundFX {
   private ctx: AudioContext | null = null;
 
-  private init() {
+  init() {
     if (!this.ctx && typeof window !== 'undefined') {
       const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
       if (AudioContext) this.ctx = new AudioContext();
     }
   }
 
+  // スマホ対応: ユーザー操作時にContextを再開させる
+  resume() {
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+  }
+
   play(type: 'click' | 'success' | 'alert' | 'boot' | 'toggle') {
     this.init();
     if (!this.ctx) return;
-    if (this.ctx.state === 'suspended') this.ctx.resume();
+    this.resume();
 
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
@@ -38,21 +46,13 @@ class SoundFX {
     const now = this.ctx.currentTime;
     
     if (type === 'click') {
-      osc.type = 'sine'; osc.frequency.setValueAtTime(800, now); osc.frequency.exponentialRampToValueAtTime(300, now + 0.1);
-      gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-      osc.start(now); osc.stop(now + 0.1);
+      osc.type = 'sine'; osc.frequency.setValueAtTime(800, now); osc.frequency.exponentialRampToValueAtTime(300, now + 0.1); gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1); osc.start(now); osc.stop(now + 0.1);
     } else if (type === 'success') {
-      osc.type = 'triangle'; osc.frequency.setValueAtTime(400, now); osc.frequency.linearRampToValueAtTime(1200, now + 0.1);
-      gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.3);
-      osc.start(now); osc.stop(now + 0.3);
+      osc.type = 'triangle'; osc.frequency.setValueAtTime(400, now); osc.frequency.linearRampToValueAtTime(1200, now + 0.1); gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.3); osc.start(now); osc.stop(now + 0.3);
     } else if (type === 'alert') {
-      osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, now); osc.frequency.linearRampToValueAtTime(100, now + 0.3);
-      gain.gain.setValueAtTime(0.15, now); gain.gain.linearRampToValueAtTime(0, now + 0.3);
-      osc.start(now); osc.stop(now + 0.3);
+      osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, now); osc.frequency.linearRampToValueAtTime(100, now + 0.3); gain.gain.setValueAtTime(0.15, now); gain.gain.linearRampToValueAtTime(0, now + 0.3); osc.start(now); osc.stop(now + 0.3);
     } else if (type === 'toggle') {
-      osc.type = 'square'; osc.frequency.setValueAtTime(600, now); 
-      gain.gain.setValueAtTime(0.05, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
-      osc.start(now); osc.stop(now + 0.05);
+      osc.type = 'square'; osc.frequency.setValueAtTime(600, now); gain.gain.setValueAtTime(0.05, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05); osc.start(now); osc.stop(now + 0.05);
     }
   }
 }
@@ -90,10 +90,10 @@ export default function LaruNexusV27() {
   const [aiGender, setAiGender] = useState<'male' | 'female'>('female');
   const [aiPersona, setAiPersona] = useState<string>('あなたは優秀なAI司令官です。冷静かつ的確に、短い言葉で報告してください。');
 
-  // --- 実プロジェクト資産データ ---
+  // --- 実プロジェクト資産データ (完全版) ---
   const initialProjects: Record<string, ProjectData> = {
     laru_nexus: { 
-      id: 'laru_nexus', name: 'LaruNEXUS', repoName: 'laru_nexus_core', url: 'nexus.larubot.com', status: 'WAITING', latency: 0, region: 'Tokyo (Render)', version: 'v27.1', lastDeploy: '2026-01-16 15:00',
+      id: 'laru_nexus', name: 'LaruNEXUS', repoName: 'laru_nexus_core', url: 'nexus.larubot.com', status: 'WAITING', latency: 0, region: 'Tokyo (Render)', version: 'v27.1', lastDeploy: '2026-01-16 16:00',
       stats: { cpu: 15, memory: 55, requests: 300, errors: 0 }, issues: [],
       proposals: [{ id: 'p_ln_1', type: 'FEATURE', title: '脳波コントロール連携の実装', impact: '操作性革命 (ハンズフリー)', cost: 'High' }]
     },
@@ -108,18 +108,42 @@ export default function LaruNexusV27() {
       issues: [{ id: 'i_fl_1', level: 'WARN', title: 'DBコネクションプール枯渇警告', description: 'ピークタイムに接続数が上限の80%に達しています。' }],
       proposals: [{ id: 'p_fl_2', type: 'OPTIMIZATION', title: 'データベースの水平分割 (Sharding)', impact: '同時接続数 10x', cost: 'High' }]
     },
+    laruvisona: { 
+      id: 'laruvisona', name: 'LARUVISONA', repoName: 'laruvisona_app', url: 'laruvisona.net', status: 'WAITING', latency: 0, region: 'Oregon (GCP)', version: 'v2.1.5', lastDeploy: '2026-01-10 10:30',
+      stats: { cpu: 8, memory: 22, requests: 890, errors: 0 },
+      issues: [{ id: 'i_lv_1', level: 'INFO', title: '画像生成APIのレイテンシ増加', description: '北米リージョンでの生成時間が平均2秒遅延しています。' }],
+      proposals: [{ id: 'p_lv_1', type: 'OPTIMIZATION', title: 'エッジレンダリングの導入', impact: '海外アクセス高速化', cost: 'Medium' }]
+    },
   };
 
   const [projects, setProjects] = useState<Record<string, ProjectData>>(initialProjects);
+  
   const strategicRoadmap: RoadmapItem[] = [
     { id: 'rm_1', category: 'AI', name: '完全自律コード修正', desc: 'エラーログを読み取りGitへ自動PR作成', benefits: 'デバッグ工数をゼロにし、開発速度を10倍に加速させます。', status: 'DEVELOPING' },
+    { id: 'rm_2', category: 'INFRA', name: 'マルチクラウド・フェイルオーバー', desc: 'AWS/GCP/Azure間の自動避難', benefits: '特定プロバイダーの障害時でも1秒たりとも停止しない可用性を実現します。', status: 'PENDING' },
     { id: 'rm_3', category: 'UX', name: '脳波コントロール連携', desc: 'Neuralink経由での思考コマンド入力', benefits: '声も指も使わず、思考のみで全システムを制御可能にします。究極のBCI。', status: 'ACTIVE' },
-    // ...
+    { id: 'rm_4', category: 'SECURITY', name: '量子暗号通信プロトコル', desc: '理論上解読不可能な通信網の構築', benefits: '量子コンピュータによる解読攻撃を無効化し、国家機密レベルの通信を保護します。', status: 'PENDING' },
+    { id: 'rm_5', category: 'AI', name: '社長人格のデジタルツイン', desc: '不在時に決裁を代行する影武者AI', benefits: '社長の思考回路を完コピし、24時間365日、適切な経営判断を自律実行します。', status: 'PENDING' },
+    { id: 'rm_6', category: 'UX', name: 'AR空間ホログラム表示', desc: 'Apple Vision Pro等への空間投影', benefits: '物理モニターの制約から解放され、空間そのものをコクピット化します。', status: 'PENDING' },
+    { id: 'rm_7', category: 'INFRA', name: '分散型ストレージ(IPFS)移行', desc: '検閲耐性を持つデータ保存', benefits: '中央集権サーバーに依存せず、データの永続性と改ざん耐性を保証します。', status: 'PENDING' },
+    { id: 'rm_8', category: 'SECURITY', name: 'ゼロトラスト・アーキテクチャ', desc: '全てのアクセスを疑う厳格な認証', benefits: '内部犯行やハッキングによる横断的な被害を物理的に遮断します。', status: 'DEVELOPING' },
+    { id: 'rm_9', category: 'AI', name: '感情分析マーケティング', desc: 'ユーザーの心拍数から需要を予測', benefits: '顕在化する前のニーズを捉え、競合より先に商品を提案可能にします。', status: 'PENDING' },
+    { id: 'rm_10', category: 'UX', name: '音声対話の超低遅延化', desc: '人間と区別がつかない応答速度', benefits: 'AIとの対話ラグを極限までなくし、真のパートナーとしての体験を提供します。', status: 'ACTIVE' },
+    { id: 'rm_11', category: 'INFRA', name: 'グリーンエネルギーサーバー', desc: '環境負荷ゼロの運用体制', benefits: 'ESG投資基準を満たし、社会的信用とブランド価値を向上させます。', status: 'PENDING' },
+    { id: 'rm_12', category: 'AI', name: '競合サービスの自動偵察', desc: 'ライバルの更新を24時間監視', benefits: '市場の変化をリアルタイムで検知し、後手にならない戦略立案を支援します。', status: 'ACTIVE' },
+    { id: 'rm_13', category: 'SECURITY', name: '生体認証(声紋)ロック', desc: '社長の声以外受け付けない設定', benefits: 'パスワード漏洩のリスクをなくし、本人以外操作不可能な要塞化を実現します。', status: 'DEVELOPING' },
+    { id: 'rm_14', category: 'UX', name: 'グローバル言語リアルタイム翻訳', desc: '全言語対応のサポート窓口', benefits: '言語の壁を撤廃し、全世界70億人をターゲット市場に変えます。', status: 'PENDING' },
+    { id: 'rm_15', category: 'AI', name: '法的リスクの自動判定', desc: '新機能の法規制クリアランス', benefits: 'リリース前のコンプライアンス違反を自動検知し、法的トラブルを未然に防ぎます。', status: 'PENDING' },
+    { id: 'rm_16', category: 'INFRA', name: 'エッジコンピューティング網', desc: 'ユーザーの端末近くで処理を実行', benefits: 'サーバー負荷を分散させつつ、ユーザー体験速度を劇的に向上させます。', status: 'PENDING' },
+    { id: 'rm_17', category: 'UX', name: 'アクセシビリティ自動最適化', desc: '全人類が使えるUIへの自動変形', benefits: '高齢者や障害を持つ方を含む、あらゆるユーザー層を取り込みます。', status: 'PENDING' },
+    { id: 'rm_18', category: 'SECURITY', name: '自己消滅プロトコル', desc: '物理奪取時にデータを完全焼却', benefits: '機密情報の流出を最終手段で阻止する、究極の防衛策です。', status: 'PENDING' },
+    { id: 'rm_19', category: 'AI', name: 'トレンド予知オラクル', desc: '3ヶ月後の流行を確率で提示', benefits: 'データに基づいた未来予知により、確実にヒットする施策のみを実行できます。', status: 'PENDING' },
+    { id: 'rm_20', category: 'INFRA', name: '衛星通信バックアップ', desc: 'Starlink経由の緊急回線確保', benefits: '地上インフラが壊滅するような災害時でも、システム運用を継続できます。', status: 'PENDING' },
   ];
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // --- 永続化 (設定も保存) ---
+  // --- 永続化: 起動時にLocalStorageから状態を復元 ---
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedProjects = localStorage.getItem('laru_nexus_v27_projects');
@@ -164,6 +188,7 @@ export default function LaruNexusV27() {
     return () => clearInterval(interval);
   }, [projects]);
 
+  // --- ログ追加 & Haptics ---
   const addLog = useCallback((msg: string, type: 'user' | 'gemini' | 'sys' | 'sec' | 'alert' | 'github' = 'sys') => {
     const time = new Date().toLocaleTimeString('ja-JP', { hour12: false });
     const id = Math.random().toString(36).substr(2, 9);
@@ -178,6 +203,10 @@ export default function LaruNexusV27() {
   // --- 高品質音声合成 (Gender Tuned) ---
   const speak = (text: string) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    
+    // スマホ対応: ユーザーアクション内であることを保証する試み
+    // (通常はクリックイベント内で呼ぶ必要があるが、非同期処理後だとブロックされることがある。
+    //  そのため、startListening時などに空の音声を再生しておく「アンロック」技が有効だが、ここでは基本実装のみ)
     window.speechSynthesis.cancel();
     
     const utterance = new SpeechSynthesisUtterance(text);
@@ -267,6 +296,14 @@ export default function LaruNexusV27() {
 
   const startListening = () => {
     sfx.play('click');
+    // スマホ対応: 音声コンテキストのアンロック
+    sfx.resume();
+    // スマホ対応: 音声合成の空打ち（アンロック）
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+    }
+
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return addLog("音声入力非対応", "alert");
     const recognition = new SpeechRecognition();
@@ -287,34 +324,59 @@ export default function LaruNexusV27() {
   const handleTabChange = (tab: any) => { setActiveTab(tab); sfx.play('click'); };
   const handleRoadmapClick = (item: RoadmapItem) => { setSelectedRoadmap(item); sfx.play('click'); };
 
-  // --- Humanized Cyber Face (SVG) ---
-  const HumanFace = ({ gender, active, level }: { gender: 'male' | 'female', active: boolean, level: number }) => {
-    const mouthOpen = active ? Math.min(20, level / 3) : 0;
-    
+  // --- Low-Poly Wireframe Face (SVG) ---
+  // 頂いた画像を参考に、幾何学的なメッシュで顔を構成
+  const LowPolyFace = ({ gender, active, level }: { gender: 'male' | 'female', active: boolean, level: number }) => {
+    const mouthOpen = active ? Math.min(15, level / 4) : 0;
+    const eyeColor = active ? "var(--neon-red)" : "var(--neon-blue)";
+    const strokeW = 1.0;
+
     if (gender === 'male') {
       return (
-        <svg width="70" height="70" viewBox="0 0 100 100" fill="none" stroke={active ? "var(--neon-red)" : "var(--neon-blue)"} strokeWidth="1.5" style={{ transition: '0.3s' }}>
-          {/* Male: Sharp Jaw, Straight Brows */}
-          <path d="M25,30 L20,50 L35,85 L65,85 L80,50 L75,30" strokeLinecap="round" /> {/* Face Shape */}
-          <path d="M20,50 L10,40" opacity="0.5" /> <path d="M80,50 L90,40" opacity="0.5" /> {/* Ears */}
-          <path d="M30,40 L45,42" strokeWidth="2" /> <path d="M55,42 L70,40" strokeWidth="2" /> {/* Eyes/Brows */}
-          <line x1="50" y1="45" x2="50" y2="60" strokeWidth="1" opacity="0.7" /> {/* Nose */}
+        <svg width="80" height="90" viewBox="0 0 100 110" fill="none" stroke={eyeColor} strokeWidth={strokeW} style={{ transition: '0.2s' }}>
+          {/* MALE: Strong Jaw, Angular */}
+          {/* Outline */}
+          <path d="M30,10 L70,10 L90,30 L90,60 L70,95 L30,95 L10,60 L10,30 Z" />
+          {/* Forehead */}
+          <path d="M30,10 L50,30 L70,10 M50,30 L50,50" />
+          {/* Eyes Area */}
+          <path d="M10,30 L30,35 L50,30 L70,35 L90,30" />
+          <path d="M10,30 L20,45 L30,35 M90,30 L80,45 L70,35" />
+          {/* Cheeks */}
+          <path d="M10,60 L20,45 L35,55 L25,80 L10,60" />
+          <path d="M90,60 L80,45 L65,55 L75,80 L90,60" />
+          {/* Nose */}
+          <path d="M50,30 L40,50 L50,60 L60,50 Z" />
+          <path d="M40,50 L35,55 M60,50 L65,55" />
           {/* Mouth (Animates) */}
-          <path d={`M35,70 Q50,${70 + mouthOpen} 65,70`} strokeWidth="2" />
-          <circle cx="50" cy="50" r="45" stroke="rgba(0,242,255,0.1)" strokeWidth="1" />
+          <path d={`M35,75 L50,${75 + mouthOpen} L65,75 L50,${70 - mouthOpen/2} Z`} />
+          <path d={`M35,75 L25,80 M65,75 L75,80`} />
+          {/* Chin */}
+          <path d="M25,80 L30,95 M75,80 L70,95 M30,95 L50,85 L70,95" />
         </svg>
       );
     } else {
       return (
-        <svg width="70" height="70" viewBox="0 0 100 100" fill="none" stroke={active ? "var(--neon-red)" : "var(--neon-blue)"} strokeWidth="1.5" style={{ transition: '0.3s' }}>
-          {/* Female: Soft Jaw, Curved Brows, Big Eyes */}
-          <path d="M20,30 Q15,50 35,85 Q50,95 65,85 Q85,50 80,30" strokeLinecap="round" /> {/* Face Shape */}
-          <path d="M30,42 Q37,35 45,42" strokeWidth="2" /> <path d="M55,42 Q63,35 70,42" strokeWidth="2" /> {/* Eyes */}
-          <circle cx="37" cy="45" r="2" fill={active ? "var(--neon-red)" : "var(--neon-blue)"} /> <circle cx="63" cy="45" r="2" fill={active ? "var(--neon-red)" : "var(--neon-blue)"} /> {/* Pupils */}
-          <line x1="50" y1="50" x2="50" y2="55" strokeWidth="1" opacity="0.7" /> {/* Nose */}
+        <svg width="80" height="90" viewBox="0 0 100 110" fill="none" stroke={eyeColor} strokeWidth={strokeW} style={{ transition: '0.2s' }}>
+          {/* FEMALE: Tapered Jaw, Larger Eye Area */}
+          {/* Outline */}
+          <path d="M30,10 L70,10 L95,30 L85,55 L50,100 L15,55 L5,30 Z" />
+          {/* Forehead */}
+          <path d="M30,10 L50,35 L70,10 M50,35 L50,55" />
+          {/* Eyes Area */}
+          <path d="M5,30 L30,40 L50,35 L70,40 L95,30" />
+          <path d="M5,30 L20,50 L30,40 M95,30 L80,50 L70,40" />
+          {/* Cheeks */}
+          <path d="M15,55 L20,50 L35,60 L30,80 L15,55" />
+          <path d="M85,55 L80,50 L65,60 L70,80 L85,55" />
+          {/* Nose */}
+          <path d="M50,35 L42,55 L50,62 L58,55 Z" />
+          <path d="M42,55 L35,60 M58,55 L65,60" />
           {/* Mouth (Animates) */}
-          <path d={`M40,70 Q50,${70 + mouthOpen} 60,70`} strokeWidth="2" />
-          <circle cx="50" cy="50" r="45" stroke="rgba(0,242,255,0.1)" strokeWidth="1" />
+          <path d={`M35,78 L50,${78 + mouthOpen} L65,78 L50,${74 - mouthOpen/2} Z`} />
+          <path d={`M35,78 L30,80 M65,78 L70,80`} />
+          {/* Chin */}
+          <path d="M30,80 L50,100 L70,80 M50,62 L50,74" />
         </svg>
       );
     }
@@ -322,47 +384,52 @@ export default function LaruNexusV27() {
 
   return (
     <div className={`nexus-container ${isAlert ? 'alert-active' : ''}`}>
+      {/* Meta Tags for PWA */}
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
 
       <style dangerouslySetInnerHTML={{ __html: `
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;700&display=swap');
         :root { --neon-blue: #00f2ff; --neon-red: #ff0040; --neon-green: #39ff14; --neon-yellow: #ffea00; --bg-dark: #050505; }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; scrollbar-width: none; }
-        body, html { height: 100dvh; width: 100vw; background: var(--bg-dark); overflow: hidden; position: fixed; color: #fff; font-family: 'JetBrains Mono', 'Noto Sans JP'; }
+        body, html { height: 100dvh; width: 100vw; background: var(--bg-dark); overflow: hidden; position: fixed; color: #fff; font-family: 'JetBrains Mono', 'Noto Sans JP'; overscroll-behavior: none; }
         .nexus-container { display: flex; flex-direction: column; height: 100%; width: 100%; position: relative; }
         .grid-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.3; background-image: linear-gradient(rgba(0,242,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,242,255,0.05) 1px, transparent 1px); background-size: 40px 40px; }
         .header { height: 50px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; background: rgba(0,0,0,0.8); border-bottom: 1px solid rgba(255,255,255,0.1); z-index: 50; }
         .nav-tabs { display: flex; background: #000; border-bottom: 1px solid #222; z-index: 50; }
-        .nav-btn { flex: 1; padding: 12px 0; background: none; border: none; color: #666; font-size: 10px; font-weight: bold; cursor: pointer; }
+        .nav-btn { flex: 1; padding: 12px 0; background: none; border: none; color: #666; font-size: 10px; font-weight: bold; cursor: pointer; transition: 0.3s; }
         .nav-btn.active { color: var(--neon-blue); border-bottom: 2px solid var(--neon-blue); }
         .main-area { flex: 1; display: flex; overflow: hidden; position: relative; z-index: 10; }
         .panel { display: none; flex-direction: column; width: 100%; height: 100%; overflow-y: auto; padding: 16px; gap: 16px; padding-bottom: 100px; }
         .panel.active { display: flex; }
-        .project-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 16px; cursor: pointer; }
-        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .project-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 16px; cursor: pointer; transition: 0.2s; }
+        .project-card:active { transform: scale(0.98); background: rgba(0,242,255,0.05); border-color: var(--neon-blue); }
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadeIn 0.2s; }
         .detail-panel { width: 100%; max-width: 600px; max-height: 85vh; background: #111; border: 1px solid var(--neon-blue); border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; }
-        .detail-header { padding: 16px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+        .detail-header { padding: 16px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; background: rgba(0,242,255,0.05); }
         .detail-content { padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
-        .roadmap-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border-bottom: 1px solid #222; cursor: pointer; }
-        .chat-bubble { max-width: 85%; padding: 10px 14px; border-radius: 12px; font-size: 13px; margin-bottom: 10px; }
+        .chat-bubble { max-width: 85%; padding: 10px 14px; border-radius: 12px; font-size: 13px; margin-bottom: 10px; word-wrap: break-word; }
         .chat-user { align-self: flex-end; background: rgba(0,242,255,0.1); border: 1px solid rgba(0,242,255,0.3); }
         .chat-gemini { align-self: flex-start; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); }
+        .chat-alert { align-self: center; color: var(--neon-red); font-size: 11px; border: 1px solid var(--neon-red); background: rgba(255,0,64,0.1); }
         
         /* Face Button */
-        .voice-hud { position: relative; width: 100px; height: 100px; margin-top: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-        .face-container { width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); border-radius: 50%; box-shadow: 0 0 20px rgba(0,242,255,0.1); }
+        .voice-hud { position: relative; width: 120px; height: 120px; margin-top: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .face-container { width: 100px; height: 100px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.3); border-radius: 50%; box-shadow: 0 0 20px rgba(0,242,255,0.1); }
         
         /* Settings Modal */
         .settings-group { margin-bottom: 20px; }
         .settings-label { font-size: 12px; color: var(--neon-blue); margin-bottom: 8px; display: block; }
         .toggle-row { display: flex; gap: 10px; }
-        .toggle-btn { flex: 1; padding: 8px; border: 1px solid #333; background: #111; color: #666; border-radius: 4px; font-size: 12px; cursor: pointer; }
-        .toggle-btn.active { border-color: var(--neon-blue); color: var(--neon-blue); background: rgba(0,242,255,0.1); }
-        .persona-input { width: 100%; height: 80px; background: #222; border: 1px solid #333; color: #fff; padding: 10px; font-size: 12px; border-radius: 4px; resize: none; }
+        .toggle-btn { flex: 1; padding: 12px; border: 1px solid #333; background: #111; color: #666; border-radius: 4px; font-size: 12px; cursor: pointer; transition: 0.2s; }
+        .toggle-btn.active { border-color: var(--neon-blue); color: var(--neon-blue); background: rgba(0,242,255,0.1); box-shadow: 0 0 10px rgba(0,242,255,0.1); }
+        .persona-input { width: 100%; height: 100px; background: #222; border: 1px solid #333; color: #fff; padding: 10px; font-size: 13px; border-radius: 4px; resize: none; }
         .persona-input:focus { border-color: var(--neon-blue); outline: none; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
       `}} />
       <div className="grid-bg" />
 
@@ -423,7 +490,7 @@ export default function LaruNexusV27() {
           <section style={{ padding: '20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
             <div className="voice-hud" onClick={startListening}>
               <div className="face-container">
-                <HumanFace gender={aiGender} active={isLive} level={audioLevel} />
+                <LowPolyFace gender={aiGender} active={isLive} level={audioLevel} />
               </div>
             </div>
             <div style={{ fontSize: '10px', marginTop: '10px', color: isLive ? 'var(--neon-red)' : '#666' }}>{isLive ? 'LISTENING...' : 'READY'}</div>
@@ -505,7 +572,7 @@ export default function LaruNexusV27() {
         </div>
       )}
 
-      {/* AI SETTINGS MODAL (Fixed Layout) */}
+      {/* AI SETTINGS MODAL */}
       {showSettings && (
         <div className="overlay" onClick={() => setShowSettings(false)}>
           <div className="detail-panel" onClick={e => e.stopPropagation()}>
@@ -516,15 +583,19 @@ export default function LaruNexusV27() {
             <div className="detail-content">
               
               <div className="settings-group">
-                <span className="settings-label">VOICE GENDER</span>
+                <span className="settings-label">VOICE GENDER / APPEARANCE</span>
                 <div className="toggle-row">
-                  <button className={`toggle-btn ${aiGender === 'male' ? 'active' : ''}`} onClick={() => { setAiGender('male'); sfx.play('toggle'); }}>MALE (LOW)</button>
-                  <button className={`toggle-btn ${aiGender === 'female' ? 'active' : ''}`} onClick={() => { setAiGender('female'); sfx.play('toggle'); }}>FEMALE (HIGH)</button>
+                  <button className={`toggle-btn ${aiGender === 'male' ? 'active' : ''}`} onClick={() => { setAiGender('male'); sfx.play('toggle'); }}>
+                    MALE<br/><span style={{fontSize:'9px', opacity:0.7}}>Low Pitch / Solid Form</span>
+                  </button>
+                  <button className={`toggle-btn ${aiGender === 'female' ? 'active' : ''}`} onClick={() => { setAiGender('female'); sfx.play('toggle'); }}>
+                    FEMALE<br/><span style={{fontSize:'9px', opacity:0.7}}>High Pitch / Sleek Form</span>
+                  </button>
                 </div>
               </div>
 
               <div className="settings-group">
-                <span className="settings-label">PERSONA DEFINITION (TEXT)</span>
+                <span className="settings-label">PERSONA DEFINITION (PROMPT INSTRUCTION)</span>
                 <textarea 
                   className="persona-input" 
                   value={aiPersona} 
@@ -534,7 +605,7 @@ export default function LaruNexusV27() {
               </div>
 
               <div style={{ fontSize: '10px', color: '#666', marginTop: '10px', textAlign: 'center' }}>
-                ※ Settings saved automatically.
+                ※ Settings are saved automatically and applied to the next response.
               </div>
             </div>
           </div>
