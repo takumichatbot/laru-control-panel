@@ -4,13 +4,14 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 
 /**
  * ==============================================================================
- * LARU NEXUS COMMAND SYSTEM v18.9 [AUTONOMOUS_COMPLETE]
+ * LARU NEXUS COMMAND SYSTEM v19.0 [STABLE_COMMANDER]
  * ------------------------------------------------------------------------------
  * AUTHOR: Takumi Saito (LARUbot President / Komazawa Law Student)
  * DATE: 2026-01-16
  * DESCRIPTION: 
- * バックエンドからのFunction Calling（自律命令）を受信し、
- * 実際にモニターの数値や色を物理的に書き換える「神経接続」を完了。
+ * 故障率を現実的な数値(0.5%)へ大幅に緩和し、安定性を向上。
+ * 一括修復命令(execute_autonomous_repair)による全サービス強制NOMINAL化を実装。
+ * PC/スマホの表示ズレを完全修正した最終安定版。
  * ==============================================================================
  */
 
@@ -32,13 +33,14 @@ interface LogEntry {
 }
 
 export default function LaruNexusV18() {
+  // --- 状態管理 (State Management) ---
   const [activeTab, setActiveTab] = useState<'MONITOR' | 'CORE'>('CORE');
   const [isLive, setIsLive] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isThinking, setIsThinking] = useState(false);
   const [inputMessage, setInputMessage] = useState('');
-  const [isAlert, setIsAlert] = useState(false); // 緊急モードフラグ
+  const [isAlert, setIsAlert] = useState(false);
 
   // --- 自律型モニター：厳選50機能プロトコル ---
   const [services, setServices] = useState<Record<string, ServiceData>>({
@@ -100,6 +102,7 @@ export default function LaruNexusV18() {
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // --- ログ・会話追加プロトコル ---
   const addLog = useCallback((msg: string, type: 'user' | 'gemini' | 'sys' | 'sec' = 'sys') => {
     const time = new Date().toLocaleTimeString('ja-JP', { hour12: false });
     const id = Math.random().toString(36).substr(2, 9);
@@ -110,7 +113,7 @@ export default function LaruNexusV18() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs, isThinking]);
 
-  // --- 自律神経接続プロトコル (Function Calling Handler) ---
+  // --- 自律神経接続：一括修復プロトコルの強化 ---
   const executeAutonomousAction = (action: any) => {
     const { name, args } = action;
 
@@ -119,16 +122,26 @@ export default function LaruNexusV18() {
       if (services[targetId]) {
         setServices(prev => ({
           ...prev,
-          [targetId]: { ...prev[targetId], status: '復旧', cpu: 5, color: '#00f2ff' } // 青色に戻す
+          [targetId]: { ...prev[targetId], status: '復旧済', cpu: 5, color: '#00f2ff' }
         }));
-        addLog(`[自律修復] ${targetId.toUpperCase()} の再起動完了。正常値へ復帰。`, 'sec');
+        addLog(`[自律修復] ${targetId.toUpperCase()} を正常化しました。`, 'sec');
       }
+    } else if (name === 'execute_autonomous_repair') {
+      // 一括修復命令: 全サービスを強制的に NOMINAL 化する
+      setServices(prev => {
+        const next = { ...prev };
+        Object.keys(next).forEach(key => {
+          next[key].cpu = 5;
+          next[key].status = '正常';
+          next[key].color = '#00f2ff';
+        });
+        return next;
+      });
+      addLog(`[一括修復] ${args.target} の統合パッチ適用。全システム復旧。`, 'sys');
     } else if (name === 'activate_emergency_mode') {
       setIsAlert(true);
-      addLog(`[緊急事態] レベル${args.level}の警戒モードを発令。全システム防御態勢。`, 'sec');
-      setTimeout(() => setIsAlert(false), 5000); // 5秒後に解除
-    } else if (name === 'execute_autonomous_repair') {
-      addLog(`[自律スキャン] ${args.target} のコード修正パッチを適用中... 完了。`, 'sys');
+      addLog(`[緊急事態] レベル${args.level}警戒態勢。`, 'sec');
+      setTimeout(() => setIsAlert(false), 5000);
     }
   };
 
@@ -142,7 +155,7 @@ export default function LaruNexusV18() {
     setInputMessage('');
 
     try {
-      const res = await fetch(`/api/gemini?v=18.9&t=${Date.now()}`, {
+      const res = await fetch(`/api/gemini?v=19.0&t=${Date.now()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: messageToSend }),
@@ -152,17 +165,14 @@ export default function LaruNexusV18() {
       
       if (!res.ok) throw new Error(data.details || data.error || `ERROR_${res.status}`);
 
-      // 1. テキストがあれば表示
       if (data.text) addLog(data.text, 'gemini');
 
-      // 2. 自律命令(Function Call)があれば実行
       if (data.functionCalls && data.functionCalls.length > 0) {
         data.functionCalls.forEach((call: any) => executeAutonomousAction(call));
       }
 
     } catch (error: any) {
       addLog(`通信途絶: 命令を受理できませんでした。`, "sec");
-      addLog(`理由: ${error.message.toUpperCase()}`, "sys");
     } finally {
       setIsThinking(false);
     }
@@ -170,52 +180,47 @@ export default function LaruNexusV18() {
 
   const startListening = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return addLog("エラー: 音声モジュール非対応", "sec");
+    if (!SpeechRecognition) return addLog("ERR: 音声モジュール非対応", "sec");
     const recognition = new SpeechRecognition();
     recognition.lang = 'ja-JP';
     recognition.start();
     setIsLive(true);
-    addLog("音声入力待機中...", "sys");
     recognition.onresult = (e: any) => {
       sendToGemini(e.results[0][0].transcript);
       setIsLive(false);
     };
-    recognition.onerror = () => {
-      setIsLive(false);
-      addLog("音声のデコードに失敗。", "sys");
-    };
+    recognition.onerror = () => setIsLive(false);
   };
 
+  // --- テレメトリ自動更新 (故障率を緩和) ---
   useEffect(() => {
     const interval = setInterval(() => {
       if (isLive) setAudioLevel(Math.random() * 100);
       setServices(prev => {
         const next = { ...prev };
-        // 自律変動シミュレーション（アラート時は変動停止）
         if (!isAlert) {
           Object.keys(next).forEach(key => {
-            const drift = Math.random() * 4 - 2;
-            // 異常検知シミュレーション: たまに負荷を上げる
-            if (Math.random() > 0.98) next[key].cpu = 95;
+            // 故障率を 0.5% に緩和 (0.98 -> 0.995)
+            if (Math.random() > 0.995) next[key].cpu = 95;
             
+            const drift = Math.random() * 4 - 2;
             next[key].cpu = Math.max(1, Math.min(99, next[key].cpu + drift));
             
-            // 状態による色の自動変更
             if (next[key].cpu > 90) {
-              next[key].color = '#ff0040'; // 赤
+              next[key].color = '#ff0040';
               next[key].status = '危険';
             } else if (next[key].cpu > 70) {
-               next[key].color = '#ffea00'; // 黄
-               next[key].status = '注意';
+              next[key].color = '#ffea00';
+              next[key].status = '注意';
             } else {
-               next[key].color = '#00f2ff'; // 青 (デフォルトに戻る)
-               next[key].status = '正常';
+              next[key].color = '#00f2ff';
+              next[key].status = '正常';
             }
           });
         }
         return next;
       });
-    }, 1000); // 1秒ごとに更新
+    }, 1000);
     return () => clearInterval(interval);
   }, [isLive, isAlert]);
 
@@ -278,9 +283,9 @@ export default function LaruNexusV18() {
           <div style={{ width: '18px', height: '18px', border: `2px solid ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}`, position: 'relative' }}>
             <div style={{ position: 'absolute', inset: '20%', background: isAlert ? 'var(--neon-red)' : 'var(--neon-blue)', boxShadow: `0 0 8px ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}` }} />
           </div>
-          <h1 style={{ fontSize: '12px', letterSpacing: '2px', margin: 0, fontWeight: 700 }}>NEXUS_v18.9</h1>
+          <h1 style={{ fontSize: '12px', letterSpacing: '2px', margin: 0, fontWeight: 700 }}>NEXUS_v19.0</h1>
         </div>
-        <div style={{ fontSize: '8px', color: isAlert ? 'var(--neon-red)' : 'var(--neon-green)', fontFamily: 'JetBrains Mono' }}>[ 2.5_FLASH_AUTONOMOUS ]</div>
+        <div style={{ fontSize: '8px', color: isAlert ? 'var(--neon-red)' : 'var(--neon-green)', fontFamily: 'JetBrains Mono' }}>[ STABLE_COMMAND_LEVEL ]</div>
       </header>
 
       {/* TABS */}
@@ -299,7 +304,7 @@ export default function LaruNexusV18() {
 
       <div className="nexus-main" style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative', width: '100%', alignItems: 'center', justifyContent: 'center' }}>
         
-        {/* MONITOR PANEL */}
+        {/* MONITOR PANEL (50 Functions Grid) */}
         <aside className={`panel-content ${activeTab === 'MONITOR' ? 'active' : ''}`} style={{ padding: '16px', overflowY: 'auto', background: 'rgba(0,0,0,0.85)' }}>
           <div style={{ fontSize: '9px', color: '#444', marginBottom: '15px', letterSpacing: '2px', textAlign: 'center' }}>// 50_SYSTEM_AUTONOMOUS_MONITOR</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(145px, 1fr))', gap: '8px', width: '100%', maxWidth: '1200px', margin: '0 auto' }}>
@@ -363,7 +368,7 @@ export default function LaruNexusV18() {
 
       <footer style={{ height: '20px', background: '#000', borderTop: '1px solid #0a0a0a', display: 'flex', alignItems: 'center', fontSize: '7px', color: '#222', justifyContent: 'space-between', padding: '0 10px', zIndex: 1100 }}>
         <div>© 2026 LARUbot // PRESIDENT TAKUMI SAITO</div>
-        <div style={{ color: 'var(--neon-green)', opacity: 0.4 }}>SYSTEM_STABLE_v18.9</div>
+        <div style={{ color: 'var(--neon-green)', opacity: 0.4 }}>SYSTEM_STABLE_v19.0</div>
       </footer>
     </div>
   );
