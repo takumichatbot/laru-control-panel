@@ -4,14 +4,13 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 
 /**
  * ==============================================================================
- * LARU NEXUS COMMAND SYSTEM v19.0 [STABLE_COMMANDER]
+ * LARU NEXUS COMMAND SYSTEM v19.1 [RESILIENT_COMMANDER]
  * ------------------------------------------------------------------------------
  * AUTHOR: Takumi Saito (LARUbot President / Komazawa Law Student)
  * DATE: 2026-01-16
  * DESCRIPTION: 
- * 故障率を現実的な数値(0.5%)へ大幅に緩和し、安定性を向上。
- * 一括修復命令(execute_autonomous_repair)による全サービス強制NOMINAL化を実装。
- * PC/スマホの表示ズレを完全修正した最終安定版。
+ * 実行時エラー(Status 1)を回避するためのメモリ・処理最適化版。
+ * 50系統の監視を維持しつつ、一括修復プロトコルの反応速度を向上。
  * ==============================================================================
  */
 
@@ -33,7 +32,6 @@ interface LogEntry {
 }
 
 export default function LaruNexusV18() {
-  // --- 状態管理 (State Management) ---
   const [activeTab, setActiveTab] = useState<'MONITOR' | 'CORE'>('CORE');
   const [isLive, setIsLive] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
@@ -42,92 +40,90 @@ export default function LaruNexusV18() {
   const [inputMessage, setInputMessage] = useState('');
   const [isAlert, setIsAlert] = useState(false);
 
-  // --- 自律型モニター：厳選50機能プロトコル ---
+  // --- 自律型モニター：50機能（データ構造を安定化） ---
   const [services, setServices] = useState<Record<string, ServiceData>>({
-    // [1] 自律コーディング・修正系 (10)
     auto_repair: { id: 'auto_repair', name: '自己修復', status: '待機', cpu: 5, color: '#00f2ff', desc: 'エラーを検知し即座にコードを自動修正' },
     remote_code: { id: 'remote_code', name: '遠隔開発', status: '監視', cpu: 2, color: '#00f2ff', desc: '社長の音声命令から新機能を自動生成' },
-    layout_fix: { id: 'layout_fix', name: '外観補正', status: '最適', cpu: 3, color: '#00f2ff', desc: 'スマホ/PCの表示ズレをリアルタイム修正' },
-    bug_hunter: { id: 'bug_hunter', name: '弱点探索', status: '実行', cpu: 12, color: '#00f2ff', desc: 'セキュリティの穴を自動で見つけて封鎖' },
-    git_push: { id: 'git_push', name: '自動納品', status: '待機', cpu: 0, color: '#00f2ff', desc: '書いたコードを自動でGitHubへプッシュ' },
-    speed_up: { id: 'speed_up', name: '高速化', status: '安定', cpu: 8, color: '#00f2ff', desc: '画像の圧縮やコードの整理を自動実行' },
-    env_monitor: { id: 'env_monitor', name: '環境守護', status: 'NOMINAL', cpu: 1, color: '#00f2ff', desc: 'APIキーの期限切れや改行混入を監視' },
-    api_updater: { id: 'api_updater', name: 'API更新', status: '最新', cpu: 0, color: '#00f2ff', desc: '最新AIモデルへの自動切り替えを準備' },
-    debug_report: { id: 'debug_report', name: '解決日報', status: '作成', cpu: 4, color: '#00f2ff', desc: '夜間の修復内容を朝までにまとめて提示' },
+    layout_fix: { id: 'layout_fix', name: '外観補正', status: '最適', cpu: 3, color: '#00f2ff', desc: '表示ズレをリアルタイム修正' },
+    bug_hunter: { id: 'bug_hunter', name: '弱点探索', status: '実行', cpu: 12, color: '#00f2ff', desc: 'セキュリティの穴を自動封鎖' },
+    git_push: { id: 'git_push', name: '自動納品', status: '待機', cpu: 0, color: '#00f2ff', desc: '書いたコードを自動GitHubプッシュ' },
+    speed_up: { id: 'speed_up', name: '高速化', status: '安定', cpu: 8, color: '#00f2ff', desc: '画像圧縮やコード整理を自動実行' },
+    env_monitor: { id: 'env_monitor', name: '環境守護', status: 'NOMINAL', cpu: 1, color: '#00f2ff', desc: 'APIキーの期限や改行混入を監視' },
+    api_updater: { id: 'api_updater', name: 'API更新', status: '最新', cpu: 0, color: '#00f2ff', desc: '最新AIモデルへの自動切り替え' },
+    debug_report: { id: 'debug_report', name: '解決日報', status: '作成', cpu: 4, color: '#00f2ff', desc: '夜間の修復内容を朝にまとめて提示' },
     scaling: { id: 'scaling', name: '負荷分散', status: '監視', cpu: 6, color: '#00f2ff', desc: 'アクセス急増時にサーバーを自動強化' },
-    // [2] ビジネス・運用監視系 (10)
-    rival_watch: { id: 'rival_watch', name: '競合監視', status: '追跡', cpu: 15, color: '#39ff14', desc: '他社サイトの更新を分析し対抗案を提示' },
+    rival_watch: { id: 'rival_watch', name: '競合監視', status: '追跡', cpu: 15, color: '#39ff14', desc: '他社サイトの更新を分析し提案' },
     user_mind: { id: 'user_mind', name: '心理分析', status: '解析', cpu: 20, color: '#39ff14', desc: '会話からユーザーの満足度を可視化' },
     trend_pred: { id: 'trend_pred', name: '流行予測', status: '計算', cpu: 25, color: '#39ff14', desc: '次に流行る技術を先取りして進言' },
-    cost_save: { id: 'cost_save', name: '経費削減', status: '節約', cpu: 2, color: '#39ff14', desc: 'API使用量を監視し無駄な通信をカット' },
-    backup_gen: { id: 'backup_gen', name: '即時保存', status: '完了', cpu: 1, color: '#39ff14', desc: '1時間ごとに全データを自動バックアップ' },
-    geo_track: { id: 'geo_track', name: '地域分析', status: '記録', cpu: 5, color: '#39ff14', desc: 'どの国からアクセスが多いかを世界地図化' },
-    vip_alert: { id: 'vip_alert', name: 'VIP検知', status: '待機', cpu: 0, color: '#39ff14', desc: '重要人物の来店を社長へ即座に通知' },
-    seo_auto: { id: 'seo_auto', name: '検索対策', status: '向上', cpu: 10, color: '#39ff14', desc: '検索上位に来るよう文章を毎日微調整' },
-    law_check: { id: 'law_check', name: '法務監視', status: '安全', cpu: 2, color: '#39ff14', desc: '利用規約が最新の法律に合うかチェック' },
+    cost_save: { id: 'cost_save', name: '経費削減', status: '節約', cpu: 2, color: '#39ff14', desc: 'API使用量を監視し無駄をカット' },
+    backup_gen: { id: 'backup_gen', name: '即時保存', status: '完了', cpu: 1, color: '#39ff14', desc: '全データを自動バックアップ' },
+    geo_track: { id: 'geo_track', name: '地域分析', status: '記録', cpu: 5, color: '#39ff14', desc: 'アクセス元の国を世界地図化' },
+    vip_alert: { id: 'vip_alert', name: 'VIP検知', status: '待機', cpu: 0, color: '#39ff14', desc: '重要人物の来店を社長へ通知' },
+    seo_auto: { id: 'seo_auto', name: '検索対策', status: '向上', cpu: 10, color: '#39ff14', desc: '文章を毎日微調整' },
+    law_check: { id: 'law_check', name: '法務監視', status: '安全', cpu: 2, color: '#39ff14', desc: '利用規約の法律適合をチェック' },
     ai_status: { id: 'ai_status', name: '知能計測', status: '進化', cpu: 30, color: '#39ff14', desc: 'AIがどれだけ賢くなったかを数値化' },
-    // [3] 社長専用・秘書系 (10)
-    kill_switch: { id: 'kill_switch', name: '緊急停止', status: '待機', cpu: 0, color: '#ff006e', desc: '一瞬で全システムを遮断する最終防衛' },
-    sch_sync: { id: 'sch_sync', name: '予定連動', status: '同期', cpu: 1, color: '#ff006e', desc: '社長の忙しさに合わせてAIの判断を調整' },
-    boss_memo: { id: 'boss_memo', name: '社長日報', status: '作成', cpu: 5, color: '#ff006e', desc: '会話を要約し、明日の課題を自動作成' },
-    emo_sense: { id: 'emo_sense', name: '感情共鳴', status: '感応', cpu: 12, color: '#ff006e', desc: '社長の疲れを声から察知し癒やしを提案' },
-    cross_link: { id: 'cross_link', name: '多角連携', status: '結合', cpu: 18, color: '#ff006e', desc: '全プロジェクト間でデータを相互共有' },
-    noti_filter: { id: 'noti_filter', name: '選別通知', status: '厳選', cpu: 3, color: '#ff006e', desc: '本当に重要な事だけを社長へ報告' },
-    trans_auto: { id: 'trans_auto', name: '多言語化', status: '翻訳', cpu: 22, color: '#ff006e', desc: '海外ユーザーの声を完璧な日本語に変換' },
-    hand_off: { id: 'hand_off', name: '作業引継', status: '待機', cpu: 2, color: '#ff006e', desc: 'MacからiPhoneへ作業をスムーズに移行' },
-    short_cmd: { id: 'short_cmd', name: '時短命令', status: '有効', cpu: 0, color: '#ff006e', desc: 'いつもの作業を一言で終わらせる機能' },
-    sim_nexus: { id: 'sim_nexus', name: '未来予測', status: '予測', cpu: 40, color: '#ff006e', desc: '新機能導入後の結果を100通り予測' },
-    // [4] 将来拡張系 (20)
-    srv_move: { id: 'srv_move', name: 'サーバー移転', status: '待機', cpu: 0, color: '#7b2eff', desc: '障害時に自動で別のサーバーへ避難' },
-    sns_guard: { id: 'sns_guard', name: 'SNS守護', status: '監視', cpu: 5, color: '#7b2eff', desc: '炎上しそうな発言を事前にブロック' },
-    moti_care: { id: 'moti_care', name: '意欲管理', status: '測定', cpu: 3, color: '#7b2eff', desc: '社長の気力を分析し作業代行を提案' },
-    dark_sync: { id: 'dark_sync', name: '環境同期', status: '追従', cpu: 1, color: '#7b2eff', desc: '外の明るさに合わせ画面光量を調整' },
-    fake_cut: { id: 'fake_cut', name: '嘘を見抜く', status: '稼働', cpu: 28, color: '#7b2eff', desc: 'ネット上のデマ情報を自動で排除' },
-    mem_clean: { id: 'mem_clean', name: '記憶整理', status: '断捨離', cpu: 10, color: '#7b2eff', desc: '古い不要な記憶を消してAIを高速化' },
-    auth_lock: { id: 'auth_lock', name: '偽者検知', status: '厳戒', cpu: 6, color: '#7b2eff', desc: '社長以外の声や入力を即座に遮断' },
+    kill_switch: { id: 'kill_switch', name: '緊急停止', status: '待機', cpu: 0, color: '#ff006e', desc: '全システム遮断の最終防衛' },
+    sch_sync: { id: 'sch_sync', name: '予定連動', status: '同期', cpu: 1, color: '#ff006e', desc: '社長の予定に合わせAI判断を調整' },
+    boss_memo: { id: 'boss_memo', name: '社長日報', status: '作成', cpu: 5, color: '#ff006e', desc: '会話を要約し課題を自動作成' },
+    emo_sense: { id: 'emo_sense', name: '感情共鳴', status: '感応', cpu: 12, color: '#ff006e', desc: '疲れを察知し癒やしを提案' },
+    cross_link: { id: 'cross_link', name: '多角連携', status: '結合', cpu: 18, color: '#ff006e', desc: '全プロジェクト間でデータ共有' },
+    noti_filter: { id: 'noti_filter', name: '選別通知', status: '厳選', cpu: 3, color: '#ff006e', desc: '重要事項のみを社長へ報告' },
+    trans_auto: { id: 'trans_auto', name: '多言語化', status: '翻訳', cpu: 22, color: '#ff006e', desc: '海外ユーザーの声を日本語に変換' },
+    hand_off: { id: 'hand_off', name: '作業引継', status: '待機', cpu: 2, color: '#ff006e', desc: 'MacからiPhoneへ作業を移行' },
+    short_cmd: { id: 'short_cmd', name: '時短命令', status: '有効', cpu: 0, color: '#ff006e', desc: 'いつもの作業を一言で完了' },
+    sim_nexus: { id: 'sim_nexus', name: '未来予測', status: '予測', cpu: 40, color: '#ff006e', desc: '導入結果を100通り予測' },
+    srv_move: { id: 'srv_move', name: 'サーバー移転', status: '待機', cpu: 0, color: '#7b2eff', desc: '障害時に自動でサーバー避難' },
+    sns_guard: { id: 'sns_guard', name: 'SNS守護', status: '監視', cpu: 5, color: '#7b2eff', desc: '炎上しそうな発言をブロック' },
+    moti_care: { id: 'moti_care', name: '意欲管理', status: '測定', cpu: 3, color: '#7b2eff', desc: '気力を分析し作業代行提案' },
+    dark_sync: { id: 'dark_sync', name: '環境同期', status: '追従', cpu: 1, color: '#7b2eff', desc: '明るさに合わせ画面光量調整' },
+    fake_cut: { id: 'fake_cut', name: '嘘を見抜く', status: '稼働', cpu: 28, color: '#7b2eff', desc: 'デマ情報を自動排除' },
+    mem_clean: { id: 'mem_clean', name: '記憶整理', status: '断捨離', cpu: 10, color: '#7b2eff', desc: '不要な記憶を消し高速化' },
+    auth_lock: { id: 'auth_lock', name: '偽者検知', status: '厳戒', cpu: 6, color: '#7b2eff', desc: '社長以外の入力を遮断' },
     off_task: { id: 'off_task', name: '予約実行', status: '蓄積', cpu: 2, color: '#7b2eff', desc: '電波復帰時に命令を一括処理' },
-    budget_eye: { id: 'budget_eye', name: '予算番人', status: '節約', cpu: 4, color: '#7b2eff', desc: '赤字にならないようAIの動きを制御' },
-    font_tune: { id: 'font_tune', name: '視覚補佐', status: '追従', cpu: 1, color: '#7b2eff', desc: '社長の疲れに合わせ文字サイズを変更' },
-    night_dev: { id: 'night_dev', name: '深夜開発', status: '予約', cpu: 0, color: '#7b2eff', desc: '社長の就寝中に細かいバグを修正' },
-    man_auto: { id: 'man_auto', name: '説明書', status: '更新', cpu: 5, color: '#7b2eff', desc: '新機能の使い方を日本語で自動作成' },
-    img_gen: { id: 'img_gen', name: '図解生成', status: '描画', cpu: 35, color: '#7b2eff', desc: '言葉を元にイメージ図を自動作成' },
-    emo_cal: { id: 'emo_cal', name: '感情暦', status: '分析', cpu: 2, color: '#7b2eff', desc: '社長との会話の深さを月次でグラフ化' },
-    surprise: { id: 'surprise', name: '特別演出', status: '待機', cpu: 0, color: '#7b2eff', desc: '記念日にAIが特別なメッセージを送信' },
-    ping_test: { id: 'ping_test', name: '生存確認', status: '合格', cpu: 3, color: '#7b2eff', desc: 'バックアップが生きているか毎日テスト' },
-    link_fix: { id: 'link_fix', name: 'リンク修理', status: '巡回', cpu: 4, color: '#7b2eff', desc: 'サイト内のリンク切れを自動で直す' },
-    dict_auto: { id: 'dict_auto', name: '阿吽の呼吸', status: '学習', cpu: 8, color: '#7b2eff', desc: '社長の専門用語をAIが完全に理解' },
-    battery: { id: 'battery', name: '省エネ', status: '追従', cpu: 1, color: '#7b2eff', desc: 'スマホの充電が減ると動きを制限' },
-    next_gen: { id: 'next_gen', name: '次世代予約', status: '予約', cpu: 0, color: '#7b2eff', desc: '新型AIの発表時に即導入準備を開始' },
+    budget_eye: { id: 'budget_eye', name: '予算番人', status: '節約', cpu: 4, color: '#7b2eff', desc: '赤字にならないようAI制御' },
+    font_tune: { id: 'font_tune', name: '視覚補佐', status: '追従', cpu: 1, color: '#7b2eff', desc: '疲れに合わせ文字サイズ変更' },
+    night_dev: { id: 'night_dev', name: '深夜開発', status: '予約', cpu: 0, color: '#7b2eff', desc: '就寝中にバグ修正' },
+    man_auto: { id: 'man_auto', name: '説明書', status: '更新', cpu: 5, color: '#7b2eff', desc: '使い方の説明を自動作成' },
+    img_gen: { id: 'img_gen', name: '図解生成', status: '描画', cpu: 35, color: '#7b2eff', desc: 'イメージ図を自動作成' },
+    emo_cal: { id: 'emo_cal', name: '感情暦', status: '分析', cpu: 2, color: '#7b2eff', desc: '会話密度をグラフ化' },
+    surprise: { id: 'surprise', name: '特別演出', status: '待機', cpu: 0, color: '#7b2eff', desc: '記念日にメッセージ送信' },
+    ping_test: { id: 'ping_test', name: '生存確認', status: '合格', cpu: 3, color: '#7b2eff', desc: 'バックアップ生存テスト' },
+    link_fix: { id: 'link_fix', name: 'リンク修理', status: '巡回', cpu: 4, color: '#7b2eff', desc: 'リンク切れを自動修正' },
+    dict_auto: { id: 'dict_auto', name: '阿吽の呼吸', status: '学習', cpu: 8, color: '#7b2eff', desc: '専門用語をAIが理解' },
+    battery: { id: 'battery', name: '省エネ', status: '追従', cpu: 1, color: '#7b2eff', desc: '充電残量に合わせ動き制限' },
+    next_gen: { id: 'next_gen', name: '次世代予約', status: '予約', cpu: 0, color: '#7b2eff', desc: '新型AIの導入準備' },
   });
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // --- ログ・会話追加プロトコル ---
   const addLog = useCallback((msg: string, type: 'user' | 'gemini' | 'sys' | 'sec' = 'sys') => {
     const time = new Date().toLocaleTimeString('ja-JP', { hour12: false });
     const id = Math.random().toString(36).substr(2, 9);
-    setLogs(prev => [...prev, { id, msg, type, time }]);
+    setLogs(prev => {
+        const newLogs = [...prev, { id, msg, type, time }];
+        return newLogs.slice(-50); // メモリ保護のため最新50件のみ保持
+    });
   }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs, isThinking]);
 
-  // --- 自律神経接続：一括修復プロトコルの強化 ---
-  const executeAutonomousAction = (action: any) => {
+  // --- 自律神経接続：一括修復プロトコル ---
+  const executeAutonomousAction = useCallback((action: any) => {
     const { name, args } = action;
 
     if (name === 'restart_service') {
       const targetId = args.serviceId;
-      if (services[targetId]) {
-        setServices(prev => ({
+      setServices(prev => {
+        if (!prev[targetId]) return prev;
+        return {
           ...prev,
           [targetId]: { ...prev[targetId], status: '復旧済', cpu: 5, color: '#00f2ff' }
-        }));
-        addLog(`[自律修復] ${targetId.toUpperCase()} を正常化しました。`, 'sec');
-      }
+        };
+      });
+      addLog(`[自律修復] ${targetId.toUpperCase()} を正常化しました。`, 'sec');
     } else if (name === 'execute_autonomous_repair') {
-      // 一括修復命令: 全サービスを強制的に NOMINAL 化する
       setServices(prev => {
         const next = { ...prev };
         Object.keys(next).forEach(key => {
@@ -137,15 +133,14 @@ export default function LaruNexusV18() {
         });
         return next;
       });
-      addLog(`[一括修復] ${args.target} の統合パッチ適用。全システム復旧。`, 'sys');
+      addLog(`[一括修復] ${args.target} パッチ適用完了。全システム復旧。`, 'sys');
     } else if (name === 'activate_emergency_mode') {
       setIsAlert(true);
-      addLog(`[緊急事態] レベル${args.level}警戒態勢。`, 'sec');
+      addLog(`[緊急] 警戒態勢レベル${args.level}。`, 'sec');
       setTimeout(() => setIsAlert(false), 5000);
     }
-  };
+  }, [addLog]);
 
-  // --- Gemini 2.5 Flash 実行エンジン ---
   const sendToGemini = async (text?: string) => {
     const messageToSend = text || inputMessage;
     if (!messageToSend || isThinking) return;
@@ -155,7 +150,7 @@ export default function LaruNexusV18() {
     setInputMessage('');
 
     try {
-      const res = await fetch(`/api/gemini?v=19.0&t=${Date.now()}`, {
+      const res = await fetch(`/api/gemini?v=19.1&t=${Date.now()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: messageToSend }),
@@ -166,13 +161,11 @@ export default function LaruNexusV18() {
       if (!res.ok) throw new Error(data.details || data.error || `ERROR_${res.status}`);
 
       if (data.text) addLog(data.text, 'gemini');
-
       if (data.functionCalls && data.functionCalls.length > 0) {
         data.functionCalls.forEach((call: any) => executeAutonomousAction(call));
       }
-
     } catch (error: any) {
-      addLog(`通信途絶: 命令を受理できませんでした。`, "sec");
+      addLog(`通信障害: ${error.message.toUpperCase()}`, "sec");
     } finally {
       setIsThinking(false);
     }
@@ -180,7 +173,7 @@ export default function LaruNexusV18() {
 
   const startListening = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return addLog("ERR: 音声モジュール非対応", "sec");
+    if (!SpeechRecognition) return addLog("音声入力非対応", "sec");
     const recognition = new SpeechRecognition();
     recognition.lang = 'ja-JP';
     recognition.start();
@@ -192,7 +185,7 @@ export default function LaruNexusV18() {
     recognition.onerror = () => setIsLive(false);
   };
 
-  // --- テレメトリ自動更新 (故障率を緩和) ---
+  // --- 低負荷型テレメトリ更新 (故障率を大幅緩和) ---
   useEffect(() => {
     const interval = setInterval(() => {
       if (isLive) setAudioLevel(Math.random() * 100);
@@ -200,9 +193,8 @@ export default function LaruNexusV18() {
         const next = { ...prev };
         if (!isAlert) {
           Object.keys(next).forEach(key => {
-            // 故障率を 0.5% に緩和 (0.98 -> 0.995)
-            if (Math.random() > 0.995) next[key].cpu = 95;
-            
+            // 故障率をさらに緩和 (0.3%まで低下)
+            if (Math.random() > 0.997) next[key].cpu = 95;
             const drift = Math.random() * 4 - 2;
             next[key].cpu = Math.max(1, Math.min(99, next[key].cpu + drift));
             
@@ -220,7 +212,7 @@ export default function LaruNexusV18() {
         }
         return next;
       });
-    }, 1000);
+    }, 1500); // 更新間隔を伸ばして負荷を軽減
     return () => clearInterval(interval);
   }, [isLive, isAlert]);
 
@@ -228,85 +220,44 @@ export default function LaruNexusV18() {
     <div className={`nexus-container ${isAlert ? 'alert-active' : ''}`}>
       <style dangerouslySetInnerHTML={{ __html: `
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;700&display=swap');
-        
         :root { --neon-blue: #00f2ff; --neon-red: #ff0040; --neon-green: #39ff14; --bg-dark: #050505; }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
         body, html { height: 100dvh; width: 100vw; background: var(--bg-dark); overflow: hidden; position: fixed; }
-
-        .nexus-container { 
-          height: 100dvh; width: 100vw; background: var(--bg-dark); color: #fff; 
-          font-family: 'JetBrains Mono', 'Noto Sans JP', sans-serif; 
-          display: flex; flex-direction: column; overflow: hidden;
-        }
-
+        .nexus-container { height: 100dvh; width: 100vw; background: var(--bg-dark); color: #fff; font-family: 'JetBrains Mono', 'Noto Sans JP', sans-serif; display: flex; flex-direction: column; overflow: hidden; }
         .grid-bg { position: fixed; inset: 0; background-image: linear-gradient(rgba(0, 242, 255, 0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 242, 255, 0.02) 1px, transparent 1px); background-size: 30px 30px; z-index: 0; pointer-events: none; }
-        
         @keyframes pulse-red { 0% { box-shadow: inset 0 0 0 rgba(255,0,64,0); } 50% { box-shadow: inset 0 0 100px rgba(255,0,64,0.3); } 100% { box-shadow: inset 0 0 0 rgba(255,0,64,0); } }
         .alert-active { animation: pulse-red 1s infinite; border: 2px solid var(--neon-red); }
-
         .panel-content { flex-direction: column; height: 100%; width: 100%; overflow: hidden; position: relative; z-index: 10; display: none; }
         .panel-content.active { display: flex; }
-
         .bubble { max-width: 88%; padding: 10px 14px; border-radius: 10px; font-size: 13px; line-height: 1.5; position: relative; word-wrap: break-word; margin-bottom: 8px; }
-        .bubble-user { align-self: flex-end; background: rgba(0, 242, 255, 0.05); border: 1px solid rgba(0, 242, 255, 0.2); border-bottom-right-radius: 2px; }
-        .bubble-gemini { align-self: flex-start; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.08); border-bottom-left-radius: 2px; }
-        .bubble-sys { align-self: center; color: #555; font-size: 8px; border: none; padding: 2px; }
-        .bubble-sec { align-self: center; background: rgba(255, 0, 64, 0.05); border: 1px solid var(--neon-red); color: var(--neon-red); font-size: 9px; }
-
-        .nexus-btn { 
-          background: rgba(0, 242, 255, 0.05); border: 1px solid var(--neon-blue); color: var(--neon-blue); 
-          padding: 12px 24px; font-weight: bold; cursor: pointer; text-transform: uppercase; 
-          letter-spacing: 2px; transition: 0.2s; font-size: 11px; outline: none;
-        }
-        .nexus-btn:active { transform: scale(0.96); background: var(--neon-blue); color: #000; }
-        .nexus-btn.listening { border-color: var(--neon-red); color: var(--neon-red); animation: blink 1s infinite; }
-
-        .core-circle {
-          position: relative; width: 180px; height: 180px; display: flex; align-items: center; justify-content: center;
-          background: radial-gradient(circle, rgba(0, 242, 255, 0.1) 0%, transparent 80%);
-          border-radius: 50%;
-        }
-
+        .bubble-user { align-self: flex-end; background: rgba(0, 242, 255, 0.05); border: 1px solid rgba(0, 242, 255, 0.2); }
+        .bubble-gemini { align-self: flex-start; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .nexus-btn { background: rgba(0, 242, 255, 0.05); border: 1px solid var(--neon-blue); color: var(--neon-blue); padding: 12px 24px; font-weight: bold; cursor: pointer; text-transform: uppercase; font-size: 11px; outline: none; }
+        .core-circle { position: relative; width: 180px; height: 180px; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle, rgba(0, 242, 255, 0.1) 0%, transparent 80%); border-radius: 50%; }
         @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes blink { 50% { opacity: 0.3; } }
-
-        @media (max-width: 768px) {
-          .core-circle { width: 140px; height: 140px; }
-          .core-circle div:first-child { font-size: 28px !important; }
-        }
       `}} />
       <div className="grid-bg" />
 
-      {/* HEADER */}
       <header style={{ height: '50px', borderBottom: '1px solid rgba(0, 242, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', background: 'rgba(0, 0, 0, 0.95)', zIndex: 1100, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{ width: '18px', height: '18px', border: `2px solid ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}`, position: 'relative' }}>
             <div style={{ position: 'absolute', inset: '20%', background: isAlert ? 'var(--neon-red)' : 'var(--neon-blue)', boxShadow: `0 0 8px ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}` }} />
           </div>
-          <h1 style={{ fontSize: '12px', letterSpacing: '2px', margin: 0, fontWeight: 700 }}>NEXUS_v19.0</h1>
+          <h1 style={{ fontSize: '12px', letterSpacing: '2px', margin: 0, fontWeight: 700 }}>NEXUS_v19.1</h1>
         </div>
-        <div style={{ fontSize: '8px', color: isAlert ? 'var(--neon-red)' : 'var(--neon-green)', fontFamily: 'JetBrains Mono' }}>[ STABLE_COMMAND_LEVEL ]</div>
+        <div style={{ fontSize: '8px', color: isAlert ? 'var(--neon-red)' : 'var(--neon-green)', fontFamily: 'JetBrains Mono' }}>[ HYPER_STABLE ]</div>
       </header>
 
-      {/* TABS */}
       <nav style={{ display: 'flex', background: '#000', borderBottom: '1px solid #1a1a1a', zIndex: 1100, flexShrink: 0 }}>
         {(['CORE', 'MONITOR'] as const).map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} style={{ 
-            flex: 1, padding: '12px 0', border: 'none', background: 'transparent', 
-            color: activeTab === tab ? 'var(--neon-blue)' : '#444', 
-            borderBottom: activeTab === tab ? '2px solid var(--neon-blue)' : 'none', 
-            fontSize: '9px', fontWeight: 'bold', cursor: 'pointer'
-          }}>
-            {tab === 'CORE' ? '司令本部 (対話)' : '自律監視パネル (50系統)'}
+          <button key={tab} onClick={() => setActiveTab(tab)} style={{ flex: 1, padding: '12px 0', border: 'none', background: 'transparent', color: activeTab === tab ? 'var(--neon-blue)' : '#444', borderBottom: activeTab === tab ? '2px solid var(--neon-blue)' : 'none', fontSize: '9px', fontWeight: 'bold' }}>
+            {tab === 'CORE' ? '司令本部' : '自律監視'}
           </button>
         ))}
       </nav>
 
-      <div className="nexus-main" style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative', width: '100%', alignItems: 'center', justifyContent: 'center' }}>
-        
-        {/* MONITOR PANEL (50 Functions Grid) */}
+      <div className="nexus-main" style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
         <aside className={`panel-content ${activeTab === 'MONITOR' ? 'active' : ''}`} style={{ padding: '16px', overflowY: 'auto', background: 'rgba(0,0,0,0.85)' }}>
-          <div style={{ fontSize: '9px', color: '#444', marginBottom: '15px', letterSpacing: '2px', textAlign: 'center' }}>// 50_SYSTEM_AUTONOMOUS_MONITOR</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(145px, 1fr))', gap: '8px', width: '100%', maxWidth: '1200px', margin: '0 auto' }}>
             {Object.values(services).map(s => (
               <div key={s.id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', padding: '10px', borderRadius: '2px' }}>
@@ -314,62 +265,42 @@ export default function LaruNexusV18() {
                   <span style={{ color: s.color, fontWeight: 'bold' }}>{s.name}</span>
                   <span style={{ color: s.cpu > 90 ? 'var(--neon-red)' : '#666', fontSize: '8px' }}>{s.status}</span>
                 </div>
-                <div style={{ fontSize: '8px', color: '#444', marginBottom: '6px', height: '20px', overflow: 'hidden' }}>{s.desc}</div>
                 <div style={{ height: '2px', background: '#111' }}><div style={{ width: `${s.cpu}%`, height: '100%', background: s.color, transition: '0.4s' }} /></div>
               </div>
             ))}
           </div>
         </aside>
 
-        {/* CORE PANEL */}
         <main className={`panel-content ${activeTab === 'CORE' ? 'active' : ''}`} style={{ display: activeTab === 'CORE' ? 'flex' : 'none' }}>
-          <section style={{ flexShrink: 0, borderBottom: '1px solid rgba(255,255,255,0.03)', padding: '20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <section style={{ flexShrink: 0, padding: '20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <div className="core-circle">
               <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: `1px solid ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}`, opacity: 0.1, transform: `scale(${1 + audioLevel / 180})`, transition: '0.1s' }} />
               <div style={{ position: 'absolute', inset: '-8px', border: `1px dashed var(--neon-blue)`, borderRadius: '50%', animation: 'rotate 60s linear infinite', opacity: 0.08 }} />
-              <div style={{ textAlign: 'center', zIndex: 10 }}>
-                <div style={{ fontSize: '32px', fontWeight: 900, textShadow: `0 0 15px ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}`, letterSpacing: '3px' }}>LARU</div>
-                <div style={{ fontSize: '7px', color: 'var(--neon-blue)', letterSpacing: '3px', marginTop: '4px', opacity: 0.8 }}>NEXUS CORE</div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '32px', fontWeight: 900, textShadow: `0 0 15px var(--neon-blue)`, letterSpacing: '3px' }}>LARU</div>
+                <div style={{ fontSize: '7px', color: 'var(--neon-blue)', letterSpacing: '3px' }}>NEXUS CORE</div>
               </div>
             </div>
-            <button onClick={startListening} className={`nexus-btn ${isLive ? 'listening' : ''}`} style={{ marginTop: '15px', padding: '8px 16px', borderRadius: '20px', fontSize: '10px' }}>
-              {isLive ? '音声解析中...' : '音声コマンド'}
-            </button>
+            <button onClick={startListening} className={`nexus-btn ${isLive ? 'listening' : ''}`} style={{ marginTop: '15px', borderRadius: '20px' }}>VOICE_COMMAND</button>
           </section>
 
           <section style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
               {logs.map(log => (
                 <div key={log.id} className={`bubble bubble-${log.type}`}>
-                  <div style={{ fontSize: '7px', color: 'rgba(255,255,255,0.15)', marginBottom: '2px' }}>{log.type.toUpperCase()} // {log.time}</div>
+                  <div style={{ fontSize: '7px', color: 'rgba(255,255,255,0.15)' }}>{log.type.toUpperCase()} // {log.time}</div>
                   {log.msg}
                 </div>
               ))}
-              {isThinking && <div className="bubble bubble-gemini" style={{ opacity: 0.4, animation: 'blink 1.5s infinite' }}>[ 思考ストリーム解析中 ]</div>}
+              {isThinking && <div className="bubble bubble-gemini" style={{ opacity: 0.4 }}>[ 解析中... ]</div>}
               <div ref={chatEndRef} />
             </div>
-
             <div style={{ padding: '10px 12px', background: '#000', borderTop: '1px solid #111' }}>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(255,255,255,0.03)', borderRadius: '20px', padding: '2px 14px', border: '1px solid rgba(0,242,255,0.15)' }}>
-                <input 
-                  type="text" 
-                  value={inputMessage} 
-                  onChange={e => setInputMessage(e.target.value)} 
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); sendToGemini(); } }} 
-                  placeholder="直通コマンドを入力..." 
-                  style={{ flex: 1, background: 'none', border: 'none', color: '#fff', outline: 'none', fontSize: '13px', height: '36px' }} 
-                />
-                <button onClick={() => sendToGemini()} style={{ background: 'none', border: 'none', color: 'var(--neon-blue)', cursor: 'pointer', fontWeight: 'bold', fontSize: '11px' }}>実行</button>
-              </div>
+              <input type="text" value={inputMessage} onChange={e => setInputMessage(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendToGemini(); }} placeholder="命令を入力..." style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(0,242,255,0.15)', color: '#fff', borderRadius: '20px', padding: '8px 16px', outline: 'none' }} />
             </div>
           </section>
         </main>
       </div>
-
-      <footer style={{ height: '20px', background: '#000', borderTop: '1px solid #0a0a0a', display: 'flex', alignItems: 'center', fontSize: '7px', color: '#222', justifyContent: 'space-between', padding: '0 10px', zIndex: 1100 }}>
-        <div>© 2026 LARUbot // PRESIDENT TAKUMI SAITO</div>
-        <div style={{ color: 'var(--neon-green)', opacity: 0.4 }}>SYSTEM_STABLE_v19.0</div>
-      </footer>
     </div>
   );
 }
