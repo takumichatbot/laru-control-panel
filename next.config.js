@@ -18,18 +18,19 @@ const withPWA = require('next-pwa')({
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export',
+  // output: 'export', <-- ここを削除（またはコメントアウト）
   trailingSlash: true,
   images: {
     unoptimized: true,
   },
   reactStrictMode: true,
-  turbopack: {},
+  // Web Serviceとして動かすための追加設定
   env: {
-    NEXTAUTH_URL: process.env.NEXTAUTH_URL || 'https://laru-control-panel.pages.dev',
+    NEXTAUTH_URL: process.env.NEXTAUTH_URL,
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   },
 };
 
