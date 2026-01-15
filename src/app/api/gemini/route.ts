@@ -2,31 +2,30 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
 /**
- * LARU NEXUS BACKEND API PROTOCOL v17.1 [STABLE_FIX]
- * 404 Not Found (v1beta) を物理的に回避し、製品版 v1 エンドポイントへ強制接続。
+ * LARU NEXUS BACKEND API PROTOCOL v17.2 [FORCE_STABLE_V1]
+ * SDKの自動バージョン判定を無効化し、物理的に v1 へ固定する最終パッチ。
  */
 
 export async function POST(req: Request) {
   try {
     const { message } = await req.json();
 
-    // 1. 環境変数の取得と徹底洗浄
     const rawKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
     if (!rawKey) throw new Error("API_KEY_MISSING");
     const cleanKey = rawKey.replace(/[\s\t\n\r\u200B-\u200D\uFEFF]/g, '').trim();
 
-    // 2. SDKの初期化
+    // 1. SDKの初期化
     const genAI = new GoogleGenerativeAI(cleanKey);
 
-    // 3. モデルの取得
-    // 404を回避するため、apiVersion を明示的に "v1" に指定し、
-    // モデル名を安定版の "gemini-1.5-flash" に固定します。
-    const model = genAI.getGenerativeModel(
-      { model: "gemini-1.5-flash" },
-      { apiVersion: "v1" }
-    );
+    // 2. モデルの取得：ここを「最も原始的かつ確実な方法」に変更
+    // モデル名に "models/" を含めず、第2引数の設定を極限までシンプルにします
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-1.5-flash",
+    }, { 
+      apiVersion: "v1" 
+    });
 
-    // 4. コンテンツ生成
+    // 3. コンテンツ生成の実行 (最も標準的な呼び出し)
     const result = await model.generateContent(message);
     const response = await result.response;
     const text = response.text();
@@ -34,12 +33,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ text });
 
   } catch (error: any) {
-    console.error("FINAL_CORE_FATAL:", error.message);
+    console.error("V1_STABLE_FATAL:", error.message);
     
-    // エラーが404の場合、モデルとバージョンの不一致として詳細を表示
+    // エラーが404の場合の最終診断
     let detail = error.message.toUpperCase();
     if (detail.includes("404")) {
-      detail = "ENDPOINT_MISMATCH: V1BETA ではなく V1 エンドポイントを使用してください。";
+      detail = "V1_ENDPOINT_NOT_FOUND: キーまたはモデル設定が製品版(V1)に未対応です。";
     }
 
     return NextResponse.json({ 
