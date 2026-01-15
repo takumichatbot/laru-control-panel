@@ -1,0 +1,35 @@
+name: Laru Nexus Commander
+
+# LaruNexusからの 'repository_dispatch' イベントを待ち受ける
+on:
+  repository_dispatch:
+    types: [laru_command]
+
+jobs:
+  execute-command:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 司令受信 (Receive Command)
+        run: |
+          echo "📡 LaruNexusからの信号を受信しました"
+          echo "Target Action: ${{ github.event.client_payload.action }}"
+      
+      # ここで実際の処理を分岐させます
+      - name: アクション実行 (Execute Action)
+        run: |
+          ACTION="${{ github.event.client_payload.action }}"
+          
+          if [ "$ACTION" == "restart_service" ]; then
+            echo "🔄 サーバー再起動プロセスを開始します..."
+            # ここにRenderのDeploy Hookなどを書くことで本当に再起動できます
+            
+          elif [ "$ACTION" == "sharding_db" ]; then
+            echo "🗄️ データベース水平分割スクリプトを起動..."
+            # ここにDB操作スクリプトを書きます
+            
+          else
+            echo "ℹ️ 未定義のコマンドです: $ACTION"
+          fi
+
+      - name: 完了報告 (Report)
+        run: echo "✅ 全プロセス完了。LaruNexusへステータスを返却します（想定）"

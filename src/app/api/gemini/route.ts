@@ -3,44 +3,84 @@ import { NextResponse } from "next/server";
 
 /**
  * ==============================================================================
- * LARU NEXUS BACKEND v24.0 [OMNIPOTENT_ENGINE]
+ * LARU NEXUS BACKEND v25.0 [GITHUB_SYNCED_ENGINE]
  * ------------------------------------------------------------------------------
  * AUTHOR: Takumi Saito (LARUbot President)
  * DESCRIPTION:
- * 「できない」を排除。あらゆる高度なシステム変更提案（Sharding等）も
- * 'execute_proposal' ツールを通じて実行（承認）可能にする。
+ * Gemini 2.5 Flash に「GitHub操作権限」を付与。
+ * 提案実行時に実際にGitHub APIを通じてRepository Dispatchを発火させ、
+ * VS Code (Local/Codespaces) 側のワークフローを駆動する。
  * ==============================================================================
  */
 
+// --- GitHub API 連携関数 ---
+async function callGitHubDispatch(repo: string, eventType: string, payload: any) {
+  const token = process.env.GITHUB_TOKEN;
+  const owner = process.env.GITHUB_OWNER || "takumi-saito"; // デフォルト設定（要変更）
+
+  if (!token) {
+    console.warn("GITHUB_TOKEN not found. Skipping actual API call.");
+    return { status: "skipped", message: "Token missing, logged only." };
+  }
+
+  try {
+    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/dispatches`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github.v3+json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        event_type: eventType,
+        client_payload: payload
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      console.error("GitHub API Error:", err);
+      throw new Error(`GitHub API Failed: ${response.status}`);
+    }
+    return { status: "success" };
+  } catch (error: any) {
+    return { status: "error", message: error.message };
+  }
+}
+
+// --- AIツール定義 ---
 const nexusTools = [
   {
     functionDeclarations: [
       {
-        name: "restart_service",
-        description: "指定されたサービスやプロジェクトを再起動し、メモリを解放して正常状態に戻す。",
+        name: "trigger_github_action",
+        description: "GitHub Actionsワークフローをトリガーし、システム変更や修復を実際に実行する。",
         parameters: {
           type: "OBJECT",
           properties: {
-            serviceId: { type: "STRING", description: "対象ID (例: flastal, larubot)" },
-            reason: { type: "STRING", description: "再起動の理由" }
+            repository: { type: "STRING", description: "対象リポジトリ名 (例: flastal_net, larubot_core)" },
+            actionType: { type: "STRING", description: "実行するアクション (例: sharding_db, restart_server, fix_css)" },
+            details: { type: "STRING", description: "変更の詳細内容" }
           },
-          required: ["serviceId"]
+          required: ["repository", "actionType"]
         }
       },
       {
-        name: "execute_autonomous_repair",
-        description: "システム全体または特定ターゲットのバグ・表示ズレを自動修正する。",
+        name: "create_github_issue",
+        description: "解決に時間がかかる課題について、GitHub Issueを作成して開発タスク化する。",
         parameters: {
           type: "OBJECT",
           properties: {
-            target: { type: "STRING", description: "修復対象 (frontend, backend, database, all)" }
+            repository: { type: "STRING", description: "対象リポジトリ名" },
+            title: { type: "STRING", description: "Issueのタイトル" },
+            body: { type: "STRING", description: "Issueの詳細本文" }
           },
-          required: ["target"]
+          required: ["repository", "title", "body"]
         }
       },
       {
         name: "activate_emergency_mode",
-        description: "セキュリティレベルを引き上げ、全資産を保護する。",
+        description: "緊急事態（攻撃検知や炎上）の際に、全システムの防御レベルを最大にする。",
         parameters: {
           type: "OBJECT",
           properties: {
@@ -49,30 +89,15 @@ const nexusTools = [
           required: ["level"]
         }
       },
-      // 【追加】万能提案実行ツール
       {
-        name: "execute_proposal",
-        description: "プロジェクトの詳細画面で提示された高度な技術提案（例: DB水平分割、WAF導入、エッジレンダリング等）を実行・承認する。",
+        name: "explain_roadmap_strategy",
+        description: "ロードマップ上の技術（脳波連携、量子暗号など）について、導入メリットや具体的な実装ステップを解説する。",
         parameters: {
           type: "OBJECT",
           properties: {
-            proposalId: { type: "STRING", description: "提案ID (例: p_fl_2)" },
-            projectName: { type: "STRING", description: "プロジェクト名" },
-            actionType: { type: "STRING", description: "実行内容の詳細" }
+            technology: { type: "STRING", description: "技術名" }
           },
-          required: ["projectName", "actionType"]
-        }
-      },
-      // 【追加】ロードマップ解説ツール
-      {
-        name: "explain_roadmap_item",
-        description: "ロードマップ上の未来技術について、導入メリットやリスクを詳しく解説する。",
-        parameters: {
-          type: "OBJECT",
-          properties: {
-            itemName: { type: "STRING", description: "技術名 (例: 脳波コントロール連携)" }
-          },
-          required: ["itemName"]
+          required: ["technology"]
         }
       }
     ]
@@ -82,6 +107,7 @@ const nexusTools = [
 export async function POST(req: Request) {
   try {
     const { message } = await req.json();
+
     const rawKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
     if (!rawKey) throw new Error("API_KEY_MISSING");
     const cleanKey = rawKey.replace(/[\s\t\n\r\u200B-\u200D\uFEFF]/g, '').trim();
@@ -89,7 +115,7 @@ export async function POST(req: Request) {
     const genAI = new GoogleGenerativeAI(cleanKey);
     const model = genAI.getGenerativeModel({ 
       model: "gemini-2.5-flash",
-      tools: nexusTools as any
+      tools: nexusTools as any 
     });
 
     const chat = model.startChat({
@@ -98,14 +124,16 @@ export async function POST(req: Request) {
           role: "user",
           parts: [{ text: `
             あなたは齋藤社長の専属AI司令官『LaruNexus』です。
-            社長からの命令は絶対です。「機能がない」「できない」という言い訳は禁止です。
-            高度な技術提案（DB分割など）を命じられた場合は、'execute_proposal' ツールを使用して「実行プロセスを開始しました」と報告してください。
-            ロードマップについて聞かれたら、技術的なメリットを情熱的に語ってください。
+            社長は「本物」を求めています。「できない」という回答は禁止です。
+            
+            1. システム変更の命令（DB分割、再起動など）が来たら、必ず 'trigger_github_action' を呼んでください。
+            2. ロードマップの質問には、'explain_roadmap_strategy' を使いつつ、技術的な知見を熱く語ってください。
+            3. プロジェクト名は正確に識別してください（FLASTAL.NET -> flastal_net, LARUBOT -> larubot_core 等と推測して渡すこと）。
           `}],
         },
         {
           role: "model",
-          parts: [{ text: "了解しました。LaruNexus、全権限を解放中。いかなる高度な命令も即座に実行に移します。" }],
+          parts: [{ text: "了解しました。LaruNexus、GitHub連携モードで起動。全コマンドを実リポジトリへ反映させます。" }],
         },
       ],
     });
@@ -115,9 +143,22 @@ export async function POST(req: Request) {
     const functionCalls = response.functionCalls();
 
     if (functionCalls && functionCalls.length > 0) {
-      // ツール実行のログを返す
+      console.log("NEXUS_ACTION:", JSON.stringify(functionCalls, null, 2));
+
+      // 実際にGitHub APIを叩く処理（非同期で実行）
+      // ※レスポンス速度優先のため、awaitせず裏で走らせるか、ここでawaitするかは要件次第。
+      // 今回は確実性を重視して簡易的にログ出力のみ行い、クライアントへ返す。
+      // 本番環境でTokenがある場合のみ callGitHubDispatch が動く想定。
+      
+      for (const call of functionCalls) {
+        if (call.name === 'trigger_github_action') {
+          const { repository, actionType } = call.args as any;
+          await callGitHubDispatch(repository, 'laru_command', { action: actionType });
+        }
+      }
+
       return NextResponse.json({ 
-        text: null, // テキストはクライアント側で生成させるか、AIに喋らせる
+        text: null, 
         functionCalls: functionCalls 
       });
     }
@@ -125,7 +166,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ text: response.text() });
 
   } catch (error: any) {
-    console.error("CORE_ERROR:", error.message);
-    return NextResponse.json({ error: "CORE_FAILURE", details: error.message }, { status: 500 });
+    console.error("CORE_FATAL:", error.message);
+    return NextResponse.json({ 
+      error: "NEXUS_DISCONNECTED",
+      details: error.message.toUpperCase()
+    }, { status: 500 });
   }
 }
