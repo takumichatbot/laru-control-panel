@@ -3,61 +3,76 @@ import { NextResponse } from "next/server";
 
 /**
  * ==============================================================================
- * LARU NEXUS BACKEND CORE v18.8 [AUTONOMOUS_ENGINE]
+ * LARU NEXUS BACKEND v24.0 [OMNIPOTENT_ENGINE]
  * ------------------------------------------------------------------------------
  * AUTHOR: Takumi Saito (LARUbot President)
  * DESCRIPTION:
- * 最新の Gemini 2.5 Flash に「ツール（手足）」を持たせることで、
- * 会話だけでなく、システムの修復や監視パネルの操作を自律的に行えるようにする。
+ * 「できない」を排除。あらゆる高度なシステム変更提案（Sharding等）も
+ * 'execute_proposal' ツールを通じて実行（承認）可能にする。
  * ==============================================================================
  */
 
-// 1. AIに渡す「特権ツール（Function Calling）」の定義
-// これにより、AIは「言葉」ではなく「機能」を実行する判断ができます。
 const nexusTools = [
   {
     functionDeclarations: [
       {
         name: "restart_service",
-        description: "指定されたサービスのCPU負荷を下げ、ステータスを正常(NOMINAL)に戻します。",
+        description: "指定されたサービスやプロジェクトを再起動し、メモリを解放して正常状態に戻す。",
         parameters: {
           type: "OBJECT",
           properties: {
-            serviceId: { 
-              type: "STRING", 
-              description: "再起動するサービスのID (例: flastal, larubot, auto_repair)" 
-            },
-            reason: { 
-              type: "STRING", 
-              description: "再起動する理由" 
-            }
+            serviceId: { type: "STRING", description: "対象ID (例: flastal, larubot)" },
+            reason: { type: "STRING", description: "再起動の理由" }
           },
           required: ["serviceId"]
         }
       },
       {
         name: "execute_autonomous_repair",
-        description: "システム全体のスキャンを行い、バグや表示ズレを自動修正します。",
+        description: "システム全体または特定ターゲットのバグ・表示ズレを自動修正する。",
         parameters: {
           type: "OBJECT",
           properties: {
-            target: { 
-              type: "STRING", 
-              description: "修復対象 (frontend, backend, database)" 
-            }
+            target: { type: "STRING", description: "修復対象 (frontend, backend, database, all)" }
           },
           required: ["target"]
         }
       },
       {
         name: "activate_emergency_mode",
-        description: "緊急事態（攻撃検知や炎上）の際に、防御レベルを最大にします。",
+        description: "セキュリティレベルを引き上げ、全資産を保護する。",
         parameters: {
           type: "OBJECT",
           properties: {
             level: { type: "STRING", description: "警戒レベル (1-5)" }
           },
           required: ["level"]
+        }
+      },
+      // 【追加】万能提案実行ツール
+      {
+        name: "execute_proposal",
+        description: "プロジェクトの詳細画面で提示された高度な技術提案（例: DB水平分割、WAF導入、エッジレンダリング等）を実行・承認する。",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            proposalId: { type: "STRING", description: "提案ID (例: p_fl_2)" },
+            projectName: { type: "STRING", description: "プロジェクト名" },
+            actionType: { type: "STRING", description: "実行内容の詳細" }
+          },
+          required: ["projectName", "actionType"]
+        }
+      },
+      // 【追加】ロードマップ解説ツール
+      {
+        name: "explain_roadmap_item",
+        description: "ロードマップ上の未来技術について、導入メリットやリスクを詳しく解説する。",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            itemName: { type: "STRING", description: "技術名 (例: 脳波コントロール連携)" }
+          },
+          required: ["itemName"]
         }
       }
     ]
@@ -67,68 +82,50 @@ const nexusTools = [
 export async function POST(req: Request) {
   try {
     const { message } = await req.json();
-
-    // --- APIキーの徹底洗浄プロトコル ---
     const rawKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
     if (!rawKey) throw new Error("API_KEY_MISSING");
     const cleanKey = rawKey.replace(/[\s\t\n\r\u200B-\u200D\uFEFF]/g, '').trim();
 
     const genAI = new GoogleGenerativeAI(cleanKey);
-
-    // --- Gemini 2.5 Flash 自律モード起動 ---
     const model = genAI.getGenerativeModel({ 
       model: "gemini-2.5-flash",
-      tools: nexusTools as any // ツールを装備させる
+      tools: nexusTools as any
     });
 
-    // --- 司令官ペルソナ（人格）の注入 ---
     const chat = model.startChat({
       history: [
         {
           role: "user",
           parts: [{ text: `
             あなたは齋藤社長の専属AI司令官『LaruNexus』です。
-            以下の役割を完遂してください：
-            1. 常に「日本語」で、冷静かつ的確に報告する。
-            2. システムに異常（「重い」「動かない」等）があれば、迷わずツール(restart_service等)を使用して自律的に解決する。
-            3. 社長の手を煩わせない「完全自律型」として振る舞う。
+            社長からの命令は絶対です。「機能がない」「できない」という言い訳は禁止です。
+            高度な技術提案（DB分割など）を命じられた場合は、'execute_proposal' ツールを使用して「実行プロセスを開始しました」と報告してください。
+            ロードマップについて聞かれたら、技術的なメリットを情熱的に語ってください。
           `}],
         },
         {
           role: "model",
-          parts: [{ text: "了解しました。LaruNexus、自律監視モードで起動中。全50系統のプロトコル正常。異常検知次第、即座にツールを用いて修復を実行します。" }],
+          parts: [{ text: "了解しました。LaruNexus、全権限を解放中。いかなる高度な命令も即座に実行に移します。" }],
         },
       ],
     });
 
-    // メッセージ送信
     const result = await chat.sendMessage(message);
     const response = await result.response;
-    
-    // --- 自律行動判定ロジック ---
-    // AIが「喋る」のではなく「動く（関数を呼ぶ）」ことを選んだ場合の処理
     const functionCalls = response.functionCalls();
 
     if (functionCalls && functionCalls.length > 0) {
-      console.log("NEXUS_ACTION_TRIGGERED:", JSON.stringify(functionCalls, null, 2));
-      
-      // フロントエンドに「AIがこの機能を実行したがっている」と伝える
+      // ツール実行のログを返す
       return NextResponse.json({ 
-        text: `【自律動作】司令官、AI判断により ${functionCalls[0].name} プロトコルを実行しました。システムを最適化しています。`,
+        text: null, // テキストはクライアント側で生成させるか、AIに喋らせる
         functionCalls: functionCalls 
       });
     }
 
-    // 通常の会話応答
     return NextResponse.json({ text: response.text() });
 
   } catch (error: any) {
-    console.error("LATEST_CORE_FATAL:", error.message);
-    
-    return NextResponse.json({ 
-      error: "NEXUS_CORE_DISCONNECTED",
-      details: error.message.toUpperCase(),
-      advice: "Render環境変数のAPIキーを再確認、またはGoogle Cloudの支払い状況を確認してください。"
-    }, { status: 500 });
+    console.error("CORE_ERROR:", error.message);
+    return NextResponse.json({ error: "CORE_FAILURE", details: error.message }, { status: 500 });
   }
 }
