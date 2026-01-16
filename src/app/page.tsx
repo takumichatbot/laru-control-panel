@@ -11,6 +11,9 @@ import { useEffect, useState, useRef, useCallback } from 'react';
  * DESCRIPTION: 
  * ブラウザエージェント(Puppeteer)との完全接続。
  * AIが取得した「視覚情報(スクリーンショット)」をチャットログにレンダリングする機能を追加。
+ * AIの人格（性別・性格）設定機能を追加。
+ * マイクアイコンを「反応するサイバーフェイス」に刷新。
+ * PWAメタタグを強化し、ブラウザUIを排除した没入体験を提供。
  * ==============================================================================
  */
 
@@ -210,32 +213,28 @@ export default function LaruNexusV28() {
     return () => clearInterval(interval);
   }, [projects]);
 
-  // --- ログ追加 ---
+  // --- ログ追加 & Haptics ---
   const addLog = useCallback((msg: string, type: 'user' | 'gemini' | 'sys' | 'sec' | 'alert' | 'github' | 'browser' = 'sys', imageUrl?: string) => {
     const time = new Date().toLocaleTimeString('ja-JP', { hour12: false });
     const id = Math.random().toString(36).substr(2, 9);
     setLogs(prev => [...prev.slice(-99), { id, msg, type, imageUrl, time }]);
-    
-    // SFX & Haptics
     if (type === 'sec' || type === 'alert') {
-      sfx.play('alert'); 
-      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([100, 50, 100]);
-    } else if (type === 'sys' || type === 'github') { 
-      sfx.play('success'); 
-    } else if (type === 'browser') {
-      sfx.play('camera'); // 撮影音
-    }
+      sfx.play('alert'); if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([100, 50, 100]);
+    } else if (type === 'sys' || type === 'github') { sfx.play('success'); }
+    else if (type === 'browser') { sfx.play('camera'); }
   }, []);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs, isThinking]);
 
-  // --- 高品質音声合成 ---
+  // --- 高品質音声合成 (Gender Tuned) ---
   const speak = (text: string) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'ja-JP';
+    
+    // 性別によるピッチ調整
     utterance.pitch = aiGender === 'male' ? 0.9 : 1.1; 
     utterance.rate = 1.0; 
 
@@ -274,7 +273,7 @@ export default function LaruNexusV28() {
     
     if (name === 'browse_website') {
       addLog(`[視覚] ${args.url} にアクセス中...`, 'browser');
-      speak(`${args.url}を確認します。`);
+      // speak(`${args.url}を確認します。`); // サイレントモード
       
       try {
         const res = await fetch('/api/browser', {
