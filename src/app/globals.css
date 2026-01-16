@@ -1,3 +1,9 @@
+/* ▼▼▼ この3行が絶対に必要です ▼▼▼ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+/* ▲▲▲ ここまで ▲▲▲ */
+
 /* LARU NEXUS COMMAND - ULTIMATE FORTRESS OS */
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Noto+Sans+JP:wght@400;700;900&display=swap');
 
@@ -8,9 +14,10 @@
   --warning: #ffaa00;
   --danger: #ff0040;
   --terminal-bg: rgba(5, 5, 5, 0.95);
+  --foreground-rgb: 0, 242, 255;
+  --background-start-rgb: 5, 5, 5;
+  --background-end-rgb: 0, 0, 0;
 }
-
-* { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
   background: #000;
@@ -20,6 +27,7 @@ body {
   overflow: hidden;
 }
 
+/* 以下、社長のデザイン設定を活かします */
 .nexus-fortress::before {
   content: "";
   position: fixed;
@@ -42,6 +50,7 @@ body {
   background-size: 40px 40px;
   z-index: 1;
   animation: gridPulse 10s ease-in-out infinite;
+  pointer-events: none;
 }
 
 @keyframes gridPulse {
@@ -49,40 +58,8 @@ body {
   50% { opacity: 0.8; transform: scale(1.02); }
 }
 
-.progress-container {
-  height: 4px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 2px;
-  overflow: hidden;
-  margin-top: 8px;
-}
-
-.progress-fill {
-  height: 100%;
-  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 10px currentColor;
-}
-
-.log-entry {
-  border-left: 2px solid transparent;
-  padding-left: 10px;
-  margin-bottom: 5px;
-  font-size: 11px;
-  animation: slideIn 0.2s ease-out;
-}
-
-@keyframes slideIn {
-  from { opacity: 0; transform: translateX(-5px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-.type-sys { border-left-color: #666; color: #aaa; }
-.type-gem { border-left-color: var(--neon-cyan); color: #fff; }
-.type-sec { border-left-color: var(--danger); color: var(--danger); font-weight: bold; }
-
-@media (max-width: 1024px) {
-  .desktop-layout { display: none; }
-  .mobile-layout { display: flex; flex-direction: column; height: 100vh; }
-}
-
-@keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+/* スクロールバーのカスタマイズ */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #000; }
+::-webkit-scrollbar-thumb { background: #003333; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #00f2ff; }

@@ -1,9 +1,10 @@
-/** @type {import('tailwindcss').Config} */
-module.exports = {
+import type { Config } from "tailwindcss";
+
+const config: Config = {
   content: [
-    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+    "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     extend: {
@@ -13,11 +14,19 @@ module.exports = {
         success: '#10B981',
         warning: '#F59E0B',
         danger: '#EF4444',
+        // ネオンカラー用に追加
+        cyan: {
+          400: '#00f2ff',
+          500: '#00d0dd',
+          900: '#003333',
+        }
       },
       fontFamily: {
+        mono: ['"JetBrains Mono"', '"Noto Sans JP"', 'monospace'],
         sans: ['Inter', 'system-ui', 'sans-serif'],
       },
     },
   },
   plugins: [],
-}
+};
+export default config;
