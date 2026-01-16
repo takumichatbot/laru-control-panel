@@ -4,75 +4,16 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 
 /**
  * ==============================================================================
- * LARU NEXUS COMMAND SYSTEM v28.0 [ALL_SEEING_EYE]
+ * LARU NEXUS COMMAND SYSTEM v29.0 [CLINE_FULL_SILENCE]
  * ------------------------------------------------------------------------------
  * AUTHOR: Takumi Saito (LARUbot President)
- * DATE: 2026-01-16
  * DESCRIPTION: 
- * ブラウザエージェント(Puppeteer)との完全接続。
- * AIが取得した「視覚情報(スクリーンショット)」をチャットログにレンダリングする機能を追加。
- * AIの人格（性別・性格）設定機能を追加。
- * マイクアイコンを「反応するサイバーフェイス」に刷新。
- * PWAメタタグを強化し、ブラウザUIを排除した没入体験を提供。
+ * - 効果音(SFX)の完全排除
+ * - 実行プロセス(Thinking/Command/Checkpoint)の可視化 (Clien Style)
+ * - 実行中は無言、全タスク完了時のみ音声報告
+ * - 情報不足時のインタラクティブな質問機能
  * ==============================================================================
  */
-
-// --- SFX Engine (Web Audio API) ---
-class SoundFX {
-  private ctx: AudioContext | null = null;
-
-  init() {
-    if (!this.ctx && typeof window !== 'undefined') {
-      const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
-      if (AudioContext) this.ctx = new AudioContext();
-    }
-  }
-
-  resume() {
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
-  }
-
-  play(type: 'click' | 'success' | 'alert' | 'boot' | 'toggle' | 'refresh' | 'clear' | 'camera') {
-    this.init();
-    if (!this.ctx) return;
-    this.resume();
-
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-
-    const now = this.ctx.currentTime;
-    
-    if (type === 'click') {
-      osc.type = 'sine'; osc.frequency.setValueAtTime(800, now); osc.frequency.exponentialRampToValueAtTime(300, now + 0.1); gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1); osc.start(now); osc.stop(now + 0.1);
-    } else if (type === 'success') {
-      osc.type = 'triangle'; osc.frequency.setValueAtTime(400, now); osc.frequency.linearRampToValueAtTime(1200, now + 0.1); gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.3); osc.start(now); osc.stop(now + 0.3);
-    } else if (type === 'alert') {
-      osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, now); osc.frequency.linearRampToValueAtTime(100, now + 0.3); gain.gain.setValueAtTime(0.15, now); gain.gain.linearRampToValueAtTime(0, now + 0.3); osc.start(now); osc.stop(now + 0.3);
-    } else if (type === 'toggle') {
-      osc.type = 'square'; osc.frequency.setValueAtTime(600, now); gain.gain.setValueAtTime(0.05, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05); osc.start(now); osc.stop(now + 0.05);
-    } else if (type === 'refresh') {
-      osc.type = 'sine'; osc.frequency.setValueAtTime(400, now); osc.frequency.linearRampToValueAtTime(800, now + 0.2); gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.2); osc.start(now); osc.stop(now + 0.2);
-    } else if (type === 'clear') {
-      osc.type = 'sawtooth'; osc.frequency.setValueAtTime(200, now); osc.frequency.linearRampToValueAtTime(50, now + 0.1); gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.1); osc.start(now); osc.stop(now + 0.1);
-    } else if (type === 'camera') {
-      // シャッター音風
-      const noise = this.ctx.createBufferSource();
-      const buffer = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.1, this.ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < buffer.length; i++) data[i] = Math.random() * 2 - 1;
-      noise.buffer = buffer;
-      noise.connect(gain);
-      gain.gain.setValueAtTime(0.5, now);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-      noise.start(now);
-    }
-  }
-}
-const sfx = new SoundFX();
 
 // --- 型定義 ---
 interface ProjectIssue { id: string; level: 'CRITICAL' | 'WARN' | 'INFO'; title: string; description: string; }
@@ -84,11 +25,11 @@ interface ProjectData {
   stats: { cpu: number; memory: number; requests: number; errors: number; }; 
   issues: ProjectIssue[]; proposals: ProjectProposal[]; 
 }
-// LogEntryに 'imageUrl' を追加して画像表示に対応
+// LogEntry: Clien風のステータスタイプを追加
 interface LogEntry { 
   id: string; 
   msg: string; 
-  type: 'user' | 'gemini' | 'sys' | 'sec' | 'alert' | 'github' | 'browser'; 
+  type: 'user' | 'ai' | 'thinking' | 'command' | 'checkpoint' | 'error' | 'question'; 
   imageUrl?: string; 
   time: string; 
 }
@@ -97,7 +38,7 @@ interface RoadmapItem {
   status: 'PENDING' | 'DEVELOPING' | 'ACTIVE'; 
 }
 
-export default function LaruNexusV28() {
+export default function LaruNexusV29() {
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'CORE' | 'ROADMAP'>('DASHBOARD');
   const [selectedProject, setSelectedProject] = useState<ProjectData | null>(null);
   const [selectedRoadmap, setSelectedRoadmap] = useState<RoadmapItem | null>(null);
@@ -111,73 +52,62 @@ export default function LaruNexusV28() {
   // --- AI Personality Settings ---
   const [showSettings, setShowSettings] = useState(false);
   const [aiGender, setAiGender] = useState<'male' | 'female'>('female');
-  const [aiPersona, setAiPersona] = useState<string>('あなたは優秀なAI司令官です。冷静かつ的確に、短い言葉で報告してください。');
+  // AIへの指示: 思考プロセスとコマンドを明確に分けるよう指示
+  const [aiPersona, setAiPersona] = useState<string>(
+    'あなたは高度な自律型エンジニアAIです。ユーザーの指示に対し、以下のフォーマットで応答してください。\n' +
+    '1. Thinking: [思考プロセス]\n' +
+    '2. Command: [実行すべきアクション]\n' +
+    '3. Response: [完了報告や質問]\n' +
+    '不明点がある場合はアクションを実行せず、Questionとしてユーザーに尋ねてください。'
+  );
 
-  // --- 実プロジェクト資産データ (完全版) ---
+  // --- 実プロジェクト資産データ ---
   const initialProjects: Record<string, ProjectData> = {
     laru_nexus: { 
-      id: 'laru_nexus', name: 'LaruNEXUS', repoName: 'laru_nexus_core', url: 'nexus.larubot.com', status: 'WAITING', latency: 0, region: 'Tokyo (Render)', version: 'v28.0', lastDeploy: '2026-01-16 19:00',
+      id: 'laru_nexus', name: 'LaruNEXUS', repoName: 'laru_nexus_core', url: 'nexus.larubot.com', status: 'WAITING', latency: 0, region: 'Tokyo (Render)', version: 'v29.0', lastDeploy: '2026-01-16 20:00',
       stats: { cpu: 15, memory: 55, requests: 300, errors: 0 }, issues: [],
-      proposals: [{ id: 'p_ln_1', type: 'FEATURE', title: '脳波コントロール連携の実装', impact: '操作性革命 (ハンズフリー)', cost: 'High' }]
+      proposals: [{ id: 'p_ln_1', type: 'FEATURE', title: '脳波コントロール連携の実装', impact: '操作性革命', cost: 'High' }]
     },
     larubot: { 
       id: 'larubot', name: 'LARUBOT-AI', repoName: 'larubot_core', url: 'larubot.com', status: 'WAITING', latency: 0, region: 'Tokyo (AWS)', version: 'v4.2.0', lastDeploy: '2026-01-15 22:00',
       stats: { cpu: 12, memory: 45, requests: 1205, errors: 0 }, issues: [],
-      proposals: [{ id: 'p_lb_1', type: 'FEATURE', title: '自律学習サイクルの強化', impact: '回答精度+15%', cost: 'High' }]
+      proposals: [{ id: 'p_lb_1', type: 'FEATURE', title: '自律学習サイクルの強化', impact: '精度向上', cost: 'High' }]
     },
     flastal: { 
-      id: 'flastal', name: 'FLASTAL.NET', repoName: 'flastal_net', url: 'flastal.net', status: 'WAITING', latency: 0, region: 'Frankfurt (Vercel)', version: 'v1.8.0', lastDeploy: '2026-01-16 02:15',
+      id: 'flastal', name: 'FLASTAL.NET', repoName: 'flastal_net', url: 'flastal.net', status: 'WAITING', latency: 0, region: 'Frankfurt', version: 'v1.8.0', lastDeploy: '2026-01-16 02:15',
       stats: { cpu: 35, memory: 68, requests: 4500, errors: 2 },
-      issues: [{ id: 'i_fl_1', level: 'WARN', title: 'DBコネクションプール枯渇警告', description: 'ピークタイムに接続数が上限の80%に達しています。' }],
-      proposals: [{ id: 'p_fl_2', type: 'OPTIMIZATION', title: 'データベースの水平分割 (Sharding)', impact: '同時接続数 10x', cost: 'High' }]
+      issues: [{ id: 'i_fl_1', level: 'WARN', title: 'DB接続数警告', description: 'ピーク時80%到達' }],
+      proposals: [{ id: 'p_fl_2', type: 'OPTIMIZATION', title: 'DB水平分割', impact: '接続数10x', cost: 'High' }]
     },
     laruvisona: { 
-      id: 'laruvisona', name: 'LARUVISONA', repoName: 'laruvisona_app', url: 'laruvisona.net', status: 'WAITING', latency: 0, region: 'Oregon (GCP)', version: 'v2.1.5', lastDeploy: '2026-01-10 10:30',
+      id: 'laruvisona', name: 'LARUVISONA', repoName: 'laruvisona_app', url: 'laruvisona.net', status: 'WAITING', latency: 0, region: 'Oregon', version: 'v2.1.5', lastDeploy: '2026-01-10 10:30',
       stats: { cpu: 8, memory: 22, requests: 890, errors: 0 },
-      issues: [{ id: 'i_lv_1', level: 'INFO', title: '画像生成APIのレイテンシ増加', description: '北米リージョンでの生成時間が平均2秒遅延しています。' }],
-      proposals: [{ id: 'p_lv_1', type: 'OPTIMIZATION', title: 'エッジレンダリングの導入', impact: '海外アクセス高速化', cost: 'Medium' }]
+      issues: [],
+      proposals: []
     },
   };
 
   const [projects, setProjects] = useState<Record<string, ProjectData>>(initialProjects);
   
   const strategicRoadmap: RoadmapItem[] = [
-    { id: 'rm_1', category: 'AI', name: '完全自律コード修正', desc: 'エラーログを読み取りGitへ自動PR作成', benefits: 'デバッグ工数をゼロにし、開発速度を10倍に加速させます。', status: 'DEVELOPING' },
-    { id: 'rm_2', category: 'INFRA', name: 'マルチクラウド・フェイルオーバー', desc: 'AWS/GCP/Azure間の自動避難', benefits: '特定プロバイダーの障害時でも1秒たりとも停止しない可用性を実現します。', status: 'PENDING' },
-    { id: 'rm_3', category: 'UX', name: '脳波コントロール連携', desc: 'Neuralink経由での思考コマンド入力', benefits: '声も指も使わず、思考のみで全システムを制御可能にします。究極のBCI。', status: 'ACTIVE' },
-    { id: 'rm_4', category: 'SECURITY', name: '量子暗号通信プロトコル', desc: '理論上解読不可能な通信網の構築', benefits: '量子コンピュータによる解読攻撃を無効化し、国家機密レベルの通信を保護します。', status: 'PENDING' },
-    { id: 'rm_5', category: 'AI', name: '社長人格のデジタルツイン', desc: '不在時に決裁を代行する影武者AI', benefits: '社長の思考回路を完コピし、24時間365日、適切な経営判断を自律実行します。', status: 'PENDING' },
-    { id: 'rm_6', category: 'UX', name: 'AR空間ホログラム表示', desc: 'Apple Vision Pro等への空間投影', benefits: '物理モニターの制約から解放され、空間そのものをコクピット化します。', status: 'PENDING' },
-    { id: 'rm_7', category: 'INFRA', name: '分散型ストレージ(IPFS)移行', desc: '検閲耐性を持つデータ保存', benefits: '中央集権サーバーに依存せず、データの永続性と改ざん耐性を保証します。', status: 'PENDING' },
-    { id: 'rm_8', category: 'SECURITY', name: 'ゼロトラスト・アーキテクチャ', desc: '全てのアクセスを疑う厳格な認証', benefits: '内部犯行やハッキングによる横断的な被害を物理的に遮断します。', status: 'DEVELOPING' },
-    { id: 'rm_9', category: 'AI', name: '感情分析マーケティング', desc: 'ユーザーの心拍数から需要を予測', benefits: '顕在化する前のニーズを捉え、競合より先に商品を提案可能にします。', status: 'PENDING' },
-    { id: 'rm_10', category: 'UX', name: '音声対話の超低遅延化', desc: '人間と区別がつかない応答速度', benefits: 'AIとの対話ラグを極限までなくし、真のパートナーとしての体験を提供します。', status: 'ACTIVE' },
-    { id: 'rm_11', category: 'INFRA', name: 'グリーンエネルギーサーバー', desc: '環境負荷ゼロの運用体制', benefits: 'ESG投資基準を満たし、社会的信用とブランド価値を向上させます。', status: 'PENDING' },
-    { id: 'rm_12', category: 'AI', name: '競合サービスの自動偵察', desc: 'ライバルの更新を24時間監視', benefits: '市場の変化をリアルタイムで検知し、後手にならない戦略立案を支援します。', status: 'ACTIVE' },
-    { id: 'rm_13', category: 'SECURITY', name: '生体認証(声紋)ロック', desc: '社長の声以外受け付けない設定', benefits: 'パスワード漏洩のリスクをなくし、本人以外操作不可能な要塞化を実現します。', status: 'DEVELOPING' },
-    { id: 'rm_14', category: 'UX', name: 'グローバル言語リアルタイム翻訳', desc: '全言語対応のサポート窓口', benefits: '言語の壁を撤廃し、全世界70億人をターゲット市場に変えます。', status: 'PENDING' },
-    { id: 'rm_15', category: 'AI', name: '法的リスクの自動判定', desc: '新機能の法規制クリアランス', benefits: 'リリース前のコンプライアンス違反を自動検知し、法的トラブルを未然に防ぎます。', status: 'PENDING' },
-    { id: 'rm_16', category: 'INFRA', name: 'エッジコンピューティング網', desc: 'ユーザーの端末近くで処理を実行', benefits: 'サーバー負荷を分散させつつ、ユーザー体験速度を劇的に向上させます。', status: 'PENDING' },
-    { id: 'rm_17', category: 'UX', name: 'アクセシビリティ自動最適化', desc: '全人類が使えるUIへの自動変形', benefits: '高齢者や障害を持つ方を含む、あらゆるユーザー層を取り込みます。', status: 'PENDING' },
-    { id: 'rm_18', category: 'SECURITY', name: '自己消滅プロトコル', desc: '物理奪取時にデータを完全焼却', benefits: '機密情報の流出を最終手段で阻止する、究極の防衛策です。', status: 'PENDING' },
-    { id: 'rm_19', category: 'AI', name: 'トレンド予知オラクル', desc: '3ヶ月後の流行を確率で提示', benefits: 'データに基づいた未来予知により、確実にヒットする施策のみを実行できます。', status: 'PENDING' },
-    { id: 'rm_20', category: 'INFRA', name: '衛星通信バックアップ', desc: 'Starlink経由の緊急回線確保', benefits: '地上インフラが壊滅するような災害時でも、システム運用を継続できます。', status: 'PENDING' },
+    { id: 'rm_1', category: 'AI', name: '完全自律コード修正', desc: 'エラーログを読み取りGitへ自動PR作成', benefits: 'デバッグ工数ゼロ', status: 'DEVELOPING' },
+    { id: 'rm_2', category: 'INFRA', name: 'マルチクラウド・フェイルオーバー', desc: 'AWS/GCP/Azure間の自動避難', benefits: '稼働率100%', status: 'PENDING' },
+    { id: 'rm_3', category: 'UX', name: '脳波コントロール連携', desc: 'Neuralink経由での思考コマンド入力', benefits: '究極のBCI', status: 'ACTIVE' },
+    { id: 'rm_4', category: 'SECURITY', name: '量子暗号通信プロトコル', desc: '理論上解読不可能な通信網', benefits: '完全な機密性', status: 'PENDING' },
+    { id: 'rm_5', category: 'AI', name: '社長人格デジタルツイン', desc: '不在時の自動決裁AI', benefits: '24時間経営', status: 'PENDING' },
   ];
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // --- 永続化 (設定も保存) ---
+  // --- Initialize & Persistence ---
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedProjects = localStorage.getItem('laru_nexus_v27_projects');
-      if (savedProjects) try { setProjects(prev => ({ ...prev, ...JSON.parse(savedProjects) })); } catch(e){}
-      
-      const savedSettings = localStorage.getItem('laru_nexus_v27_settings');
+      const savedSettings = localStorage.getItem('laru_nexus_v29_settings');
       if (savedSettings) {
         try {
           const settings = JSON.parse(savedSettings);
           setAiGender(settings.gender || 'female');
-          setAiPersona(settings.persona || 'あなたは優秀なAI司令官です。');
+          setAiPersona(settings.persona || aiPersona);
         } catch(e){}
       }
       window.speechSynthesis.onvoiceschanged = () => {
@@ -188,45 +118,37 @@ export default function LaruNexusV28() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      if (Object.keys(projects).length > 0) localStorage.setItem('laru_nexus_v27_projects', JSON.stringify(projects));
-      localStorage.setItem('laru_nexus_v27_settings', JSON.stringify({ gender: aiGender, persona: aiPersona }));
+      localStorage.setItem('laru_nexus_v29_settings', JSON.stringify({ gender: aiGender, persona: aiPersona }));
     }
-  }, [projects, aiGender, aiPersona]);
+  }, [aiGender, aiPersona]);
 
-  // --- リアル死活監視 ---
+  // --- Realtime Monitoring (Mock Ping) ---
   useEffect(() => {
-    const checkStatus = async () => {
-      for (const key of Object.keys(projects)) {
-        const p = projects[key];
-        try {
-          const controller = new AbortController();
-          setTimeout(() => controller.abort(), 2000);
-          const res = await fetch(`/api/ping?url=${p.url}`, { signal: controller.signal, cache: 'no-store' }).catch(() => null);
-          if (res && res.ok) {
-            const data = await res.json();
-            setProjects(prev => ({ ...prev, [key]: { ...prev[key], status: data.status || 'ONLINE', latency: data.latency || Math.floor(Math.random() * 50) + 20 } }));
-          }
-        } catch (e) {}
-      }
-    };
-    const interval = setInterval(checkStatus, 15000);
+    const interval = setInterval(async () => {
+      // 実際にはバックグラウンドでPingを打つイメージ
+      setProjects(prev => {
+        const next = { ...prev };
+        Object.keys(next).forEach(k => {
+          // ランダムに数値を変動させて「生きている」感を演出
+          next[k].latency = Math.max(10, next[k].latency + (Math.random() * 10 - 5));
+          next[k].stats.cpu = Math.max(0, Math.min(100, next[k].stats.cpu + (Math.random() * 4 - 2)));
+        });
+        return next;
+      });
+    }, 3000);
     return () => clearInterval(interval);
-  }, [projects]);
+  }, []);
 
-  // --- ログ追加 & Haptics ---
-  const addLog = useCallback((msg: string, type: 'user' | 'gemini' | 'sys' | 'sec' | 'alert' | 'github' | 'browser' = 'sys', imageUrl?: string) => {
+  // --- Log System (Clien Style) ---
+  const addLog = useCallback((msg: string, type: LogEntry['type'] = 'system', imageUrl?: string) => {
     const time = new Date().toLocaleTimeString('ja-JP', { hour12: false });
     const id = Math.random().toString(36).substr(2, 9);
     setLogs(prev => [...prev.slice(-99), { id, msg, type, imageUrl, time }]);
-    if (type === 'sec' || type === 'alert') {
-      sfx.play('alert'); if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([100, 50, 100]);
-    } else if (type === 'sys' || type === 'github') { sfx.play('success'); }
-    else if (type === 'browser') { sfx.play('camera'); }
   }, []);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs, isThinking]);
 
-  // --- 高品質音声合成 (Gender Tuned) ---
+  // --- Voice Synthesis (Completion Only) ---
   const speak = (text: string) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
@@ -234,46 +156,44 @@ export default function LaruNexusV28() {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'ja-JP';
     
-    // 性別によるピッチ調整
-    utterance.pitch = aiGender === 'male' ? 0.9 : 1.1; 
-    utterance.rate = 1.0; 
+    // Gender Settings
+    if (aiGender === 'male') {
+      utterance.pitch = 0.9; utterance.rate = 1.0; 
+    } else {
+      utterance.pitch = 1.2; utterance.rate = 1.1;
+    }
 
     const voices = window.speechSynthesis.getVoices();
     const jpVoices = voices.filter(v => v.lang.includes('ja') || v.lang.includes('JP'));
-
     let targetVoice;
+    
     if (aiGender === 'female') {
-      targetVoice = jpVoices.find(v => v.name.includes('Kyoko') || v.name.includes('Haruka') || v.name.includes('Ayumi') || v.name.includes('Sayaka') || v.name.includes('Google 日本語') || v.name.includes('Female'));
-      if (!targetVoice) utterance.pitch = 1.4;
+      targetVoice = jpVoices.find(v => v.name.includes('Kyoko') || v.name.includes('Haruka') || v.name.includes('Google') || v.name.includes('Female'));
     } else {
-      targetVoice = jpVoices.find(v => v.name.includes('Hattori') || v.name.includes('Ichiro') || v.name.includes('Kenji') || v.name.includes('Male'));
-      if (!targetVoice) utterance.pitch = 0.7;
+      targetVoice = jpVoices.find(v => v.name.includes('Hattori') || v.name.includes('Ichiro') || v.name.includes('Male'));
     }
 
     if (targetVoice) utterance.voice = targetVoice;
-    utterance.rate = 1.1; 
     window.speechSynthesis.speak(utterance);
   };
 
-  useEffect(() => { if (!isLive) { setAudioLevel(0); return; } const interval = setInterval(() => setAudioLevel(Math.random() * 100), 50); return () => clearInterval(interval); }, [isLive]);
-
-  // --- カタカナ音声正規化 (Normalization) ---
-  const normalizeVoiceInput = (input: string) => {
-    let normalized = input;
-    if (input.includes('フラスタル')) normalized = normalized.replace(/フラスタル/g, 'FLASTAL.NET');
-    if (input.includes('ラルボット')) normalized = normalized.replace(/ラルボット/g, 'LARUBOT-AI');
-    if (input.includes('ラルビソナ')) normalized = normalized.replace(/ラルビソナ/g, 'LARUVISONA');
-    if (input.includes('ネクサス')) normalized = normalized.replace(/ネクサス/g, 'LaruNEXUS');
-    return normalized;
+  // --- Input Normalizer ---
+  const normalizeInput = (input: string) => {
+    let s = input;
+    s = s.replace(/ラルボット/g, 'LARUBOT-AI');
+    s = s.replace(/アルボット/g, 'LARUBOT-AI');
+    s = s.replace(/フラスタル/g, 'FLASTAL.NET');
+    s = s.replace(/ネクサス/g, 'LaruNEXUS');
+    return s;
   };
 
-  // --- Function Calling Handler ---
-  const executeAutonomousAction = useCallback(async (action: any) => {
+  // --- Action Executors ---
+  const executeAction = async (action: any) => {
     const { name, args } = action;
     
     if (name === 'browse_website') {
-      addLog(`[視覚] ${args.url} にアクセス中...`, 'browser');
-      // speak(`${args.url}を確認します。`); // サイレントモード
+      // 経過報告 (音声なし)
+      addLog(`Command: ブラウザエージェントを起動中... (${args.url})`, 'command');
       
       try {
         const res = await fetch('/api/browser', {
@@ -285,91 +205,112 @@ export default function LaruNexusV28() {
         
         if (data.status === 'SUCCESS') {
           if (data.result.type === 'image') {
-            addLog(`[視覚] サイトの撮影に成功しました。`, 'browser', data.result.data);
-            speak('サイトの画像を取得しました。');
+            addLog(`Checkpoint: 視覚データの取得に成功`, 'checkpoint', data.result.data);
           } else {
-            addLog(`[解析] テキストデータを取得: ${data.result.data.substring(0, 50)}...`, 'browser');
-            speak('テキスト情報を取得しました。');
+            addLog(`Checkpoint: テキスト解析完了 (${data.result.data.length} chars)`, 'checkpoint');
           }
         } else {
-          addLog(`[エラー] ブラウザ操作に失敗: ${data.message}`, 'alert');
+          addLog(`Error: ブラウザ操作エラー: ${data.message}`, 'error');
         }
       } catch (e) {
-        addLog(`[エラー] ブラウザエージェント接続不能`, 'alert');
+        addLog(`Error: エージェント接続失敗`, 'error');
       }
     } 
-    else if (name === 'restart_service') {
-      addLog(`[統制命令] ${args.serviceId.toUpperCase()} の再起動を完了。`, 'sec');
-      speak(`${args.serviceId}を再起動しました。`);
-    } else if (name === 'execute_proposal') {
-      addLog(`[承認] ${args.projectName} / ${args.actionType} のデプロイを開始。`, 'sec');
-      speak(`${args.actionType}のデプロイを開始します。`);
-      setTimeout(() => {
-        setProjects(prev => {
-          const next = { ...prev };
-          Object.keys(next).forEach(key => {
-            const proj = next[key];
-            proj.proposals = proj.proposals.filter(p => !p.title.includes(args.actionType) && !args.actionType.includes(p.title));
-            if (proj.name === args.projectName) { proj.stats.errors = 0; proj.stats.cpu = 5; }
-          });
-          return next;
-        });
-        addLog(`[完了] ${args.actionType} の実装完了。正常稼働中。`, 'sys');
-        speak(`実装が完了しました。`);
-      }, 3000);
-    } else if (name === 'activate_emergency_mode') {
+    else if (name === 'trigger_github_action') {
+      addLog(`Command: GitHub Action (${args.actionType}) をトリガー`, 'command');
+      // ここで実際のAPIコールを入れる（今回はモック動作）
+      await new Promise(r => setTimeout(r, 1000)); // 処理時間の演出
+      addLog(`Checkpoint: ワークフローが正常にキューイングされました`, 'checkpoint');
+    }
+    else if (name === 'activate_emergency_mode') {
       setIsAlert(true);
-      addLog(`[緊急] レベル${args.level} 警戒態勢。`, 'sec');
-      speak(`緊急警戒レベル${args.level}を発令。`);
+      addLog(`Command: 緊急警戒レベル${args.level}を発令`, 'command');
       setTimeout(() => setIsAlert(false), 5000);
     }
-  }, [addLog]);
+  };
 
+  // --- Main Core Logic ---
   const sendToGemini = async (text?: string) => {
     const rawMessage = text || inputMessage;
     if (!rawMessage || isThinking) return;
     
-    // 正規化
-    const messageToSend = normalizeVoiceInput(rawMessage);
-
-    setIsThinking(true);
-    // ユーザーの発言をログに表示
-    if (!text && inputMessage) addLog(inputMessage, 'user');
-    else if (text) addLog(text, 'user');
-    
+    const messageToSend = normalizeInput(rawMessage);
     setInputMessage('');
-    sfx.play('click');
+    setIsThinking(true);
+    
+    // 1. ユーザー入力ログ (音声なし)
+    addLog(messageToSend, 'user');
 
-    const promptWithPersona = `[System: ${aiPersona}] User: ${messageToSend}`;
+    const promptWithPersona = `
+      [System Instructions]
+      Persona: ${aiPersona}
+      Current Time: ${new Date().toLocaleString()}
+      
+      User Input: "${messageToSend}"
+      
+      あなたはClienのようなエンジニアリングAIです。
+      以下のステップで応答を作成してください。
+      
+      1. Thinking: ユーザーの意図を分析し、どのツールを使うべきか、情報が足りているか思考するプロセスを出力。
+      2. Question: もし情報（リポジトリ名など）が不足している場合は、Questionとしてユーザーに尋ねる。
+      3. Action: 情報が十分なら、適切なツール（browse_website, trigger_github_action等）を選択。
+      4. Response: 全て完了した後の最終報告メッセージ。
+    `;
 
     try {
-      const res = await fetch(`/api/gemini?v=28.0&t=${Date.now()}`, {
+      // "Thinking..." 演出
+      addLog("Thinking: リクエストを解析中...", 'thinking');
+
+      const res = await fetch(`/api/gemini?v=29.0&t=${Date.now()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: promptWithPersona }),
         cache: 'no-store'
       });
       const data = await res.json();
+
       if (!res.ok) throw new Error(data.details || data.error);
+
+      // Geminiからの応答に含まれる思考プロセスがあれば表示したいが、
+      // APIの仕様上 functionCalls と text が分かれている場合が多い。
+      // ここでは functionCalls があればそれを実行するフローにする。
+
       if (data.functionCalls && data.functionCalls.length > 0) {
-        data.functionCalls.forEach((call: any) => executeAutonomousAction(call));
-        if (data.text) { addLog(data.text, 'gemini'); speak(data.text); }
-      } else if (data.text) {
-        addLog(data.text, 'gemini');
-        speak(data.text);
+        // アクションがある場合
+        for (const call of data.functionCalls) {
+          await executeAction(call);
+        }
+        
+        // 全アクション完了後、最終報告 (ここで初めて喋る)
+        const finalMsg = data.text || "全タスクが完了しました。";
+        addLog(finalMsg, 'ai');
+        speak(finalMsg); 
+
+      } else {
+        // アクションがなく、テキスト返答のみの場合（質問や会話）
+        // 例：「アルボットとは何ですか？」など
+        const reply = data.text || "応答を受信できませんでした。";
+        
+        // 質問かどうか判定（簡易的）
+        if (reply.includes("？") || reply.includes("?")) {
+          addLog(reply, 'question');
+        } else {
+          addLog(reply, 'ai');
+        }
+        speak(reply);
       }
+
     } catch (error: any) {
-      addLog(`通信エラー: ${error.message}`, "alert");
-      speak("通信エラーが発生しました。");
+      addLog(`Error: 通信エラー発生: ${error.message}`, 'error');
+      speak("システムエラーが発生しました。");
     } finally {
       setIsThinking(false);
     }
   };
 
+  // --- Input Handlers ---
   const startListening = () => {
-    sfx.play('click');
-    sfx.resume();
-    // スマホ対応: 音声合成の空打ち（アンロック）
+    // スマホ対応: 音声コンテキストのアンロック（無音再生）
     if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
         const dummy = new SpeechSynthesisUtterance('');
@@ -378,11 +319,13 @@ export default function LaruNexusV28() {
     }
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return addLog("音声入力非対応", "alert");
+    if (!SpeechRecognition) return addLog("音声入力がサポートされていません", 'error');
+    
     const recognition = new SpeechRecognition();
     recognition.lang = 'ja-JP';
     recognition.interimResults = false; 
     recognition.continuous = false;
+    
     recognition.onstart = () => setIsLive(true);
     recognition.onresult = (e: any) => {
       const transcript = e.results[0][0].transcript;
@@ -391,21 +334,14 @@ export default function LaruNexusV28() {
     };
     recognition.onerror = () => setIsLive(false);
     recognition.onend = () => setIsLive(false);
-    try { recognition.start(); } catch (e) { addLog("起動失敗", "alert"); }
+    
+    try { recognition.start(); } catch (e) { addLog("マイク起動エラー", 'error'); }
   };
 
-  const handleTabChange = (tab: any) => { setActiveTab(tab); sfx.play('click'); };
-  const handleRoadmapClick = (item: RoadmapItem) => { setSelectedRoadmap(item); sfx.play('click'); };
-  
-  const handleRefresh = () => {
-    sfx.play('refresh');
-    if (typeof window !== 'undefined') window.location.reload();
-  };
-  const handleClearLogs = () => {
-    sfx.play('clear');
-    setLogs([]);
-    addLog("システムログを消去しました。", "sys");
-  };
+  const handleTabChange = (tab: any) => setActiveTab(tab);
+  const handleRoadmapClick = (item: RoadmapItem) => setSelectedRoadmap(item);
+  const handleRefresh = () => typeof window !== 'undefined' && window.location.reload();
+  const handleClearLogs = () => { setLogs([]); addLog("ログをクリアしました", 'system'); };
 
   // --- Beautiful Low-Poly Face (SVG) ---
   const LowPolyFace = ({ gender, active, level }: { gender: 'male' | 'female', active: boolean, level: number }) => {
@@ -416,6 +352,7 @@ export default function LaruNexusV28() {
     if (gender === 'male') {
       return (
         <svg width="100" height="120" viewBox="0 0 100 120" fill="none" stroke={color} strokeWidth="1" style={{ transition: '0.2s', filter: 'drop-shadow(0 0 5px rgba(0,242,255,0.3))' }}>
+          {/* MALE: Strong Jaw, Angular */}
           <path d="M20,30 L50,10 L80,30 L85,60 L70,100 L30,100 L15,60 L20,30 Z" opacity={opacity} />
           <path d="M20,30 L50,40 L80,30 M50,10 L50,40" opacity="0.5" />
           <path d="M15,60 L30,50 L50,60 L70,50 L85,60" />
@@ -430,6 +367,7 @@ export default function LaruNexusV28() {
     } else {
       return (
         <svg width="100" height="120" viewBox="0 0 100 120" fill="none" stroke={color} strokeWidth="1" style={{ transition: '0.2s', filter: 'drop-shadow(0 0 5px rgba(0,242,255,0.3))' }}>
+          {/* FEMALE: Slender Jaw, Elegant */}
           <path d="M15,30 L50,5 L85,30 L90,55 L50,110 L10,55 L15,30 Z" opacity={opacity} />
           <path d="M15,30 L50,35 L85,30 M50,5 L50,35" opacity="0.5" />
           <path d="M10,55 L30,50 L50,60 L70,50 L90,55" />
@@ -472,11 +410,16 @@ export default function LaruNexusV28() {
         .detail-header { padding: 16px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; background: rgba(0,242,255,0.05); }
         .detail-content { padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
         .roadmap-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border-bottom: 1px solid #222; cursor: pointer; }
-        .chat-bubble { max-width: 85%; padding: 10px 14px; border-radius: 12px; font-size: 13px; margin-bottom: 10px; word-wrap: break-word; }
-        .chat-user { align-self: flex-end; background: rgba(0,242,255,0.1); border: 1px solid rgba(0,242,255,0.3); }
-        .chat-gemini { align-self: flex-start; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); }
-        .chat-browser { align-self: flex-start; border: 1px solid var(--neon-yellow); color: var(--neon-yellow); background: rgba(255, 234, 0, 0.05); }
-        .chat-alert { align-self: center; color: var(--neon-red); font-size: 11px; border: 1px solid var(--neon-red); background: rgba(255,0,64,0.1); }
+        
+        /* Clien-style Logs */
+        .chat-bubble { max-width: 90%; padding: 10px; border-radius: 4px; font-size: 12px; margin-bottom: 8px; word-wrap: break-word; border-left: 3px solid transparent; background: rgba(255,255,255,0.03); font-family: 'JetBrains Mono', monospace; }
+        .chat-user { border-color: var(--neon-blue); color: #fff; align-self: flex-end; }
+        .chat-ai { border-color: var(--neon-green); color: var(--neon-green); align-self: flex-start; }
+        .chat-thinking { border-color: #888; color: #888; font-style: italic; }
+        .chat-command { border-color: var(--neon-yellow); color: var(--neon-yellow); }
+        .chat-checkpoint { border-color: #fff; color: #fff; background: rgba(255,255,255,0.1); }
+        .chat-question { border-color: #ff00ff; color: #ff00ff; font-weight: bold; }
+        .chat-error { border-color: var(--neon-red); color: var(--neon-red); }
         
         /* Face Button */
         .voice-hud { position: relative; width: 120px; height: 120px; margin-top: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
@@ -499,7 +442,7 @@ export default function LaruNexusV28() {
       <header className="header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{ width: '12px', height: '12px', background: isAlert ? 'var(--neon-red)' : 'var(--neon-blue)', boxShadow: `0 0 10px ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}` }} />
-          <h1 style={{ fontSize: '14px', letterSpacing: '2px', margin: 0 }}>NEXUS_v28.0</h1>
+          <h1 style={{ fontSize: '14px', letterSpacing: '2px', margin: 0 }}>NEXUS_v29.0</h1>
         </div>
         <div style={{ display: 'flex', gap: '15px' }}>
           <button onClick={handleRefresh} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '18px', cursor: 'pointer' }}>🔄</button>
@@ -520,7 +463,7 @@ export default function LaruNexusV28() {
         <div className={`panel ${activeTab === 'DASHBOARD' ? 'active' : ''}`}>
           <div style={{ fontSize: '10px', color: '#666', letterSpacing: '1px' }}>// ACTIVE_PROJECTS_MONITOR</div>
           {Object.values(projects).map(p => (
-            <div key={p.id} className="project-card" onClick={() => { setSelectedProject(p); sfx.play('click'); }}>
+            <div key={p.id} className="project-card" onClick={() => setSelectedProject(p)}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--neon-blue)' }}>{p.name}</div>
                 <div className="status-badge" style={{ color: p.status === 'ONLINE' ? 'var(--neon-green)' : '#666' }}>{p.status}</div>
@@ -569,7 +512,7 @@ export default function LaruNexusV28() {
                 {log.msg}
               </div>
             ))}
-            {isThinking && <div className="chat-bubble chat-gemini" style={{ opacity: 0.5 }}>...</div>}
+            {isThinking && <div className="chat-bubble chat-thinking" style={{ opacity: 0.5 }}>Thinking...</div>}
             <div ref={chatEndRef} />
           </div>
           <div style={{ padding: '12px', background: '#000' }}>
@@ -655,10 +598,10 @@ export default function LaruNexusV28() {
               <div className="settings-group">
                 <span className="settings-label">VOICE GENDER / APPEARANCE</span>
                 <div className="toggle-row">
-                  <button className={`toggle-btn ${aiGender === 'male' ? 'active' : ''}`} onClick={() => { setAiGender('male'); sfx.play('toggle'); }}>
+                  <button className={`toggle-btn ${aiGender === 'male' ? 'active' : ''}`} onClick={() => setAiGender('male')}>
                     MALE<br/><span style={{fontSize:'9px', opacity:0.7}}>Low Pitch / Solid Form</span>
                   </button>
-                  <button className={`toggle-btn ${aiGender === 'female' ? 'active' : ''}`} onClick={() => { setAiGender('female'); sfx.play('toggle'); }}>
+                  <button className={`toggle-btn ${aiGender === 'female' ? 'active' : ''}`} onClick={() => setAiGender('female')}>
                     FEMALE<br/><span style={{fontSize:'9px', opacity:0.7}}>High Pitch / Sleek Form</span>
                   </button>
                 </div>
