@@ -4,14 +4,13 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 
 /**
  * ==============================================================================
- * LARU NEXUS COMMAND SYSTEM v27.3 [APOLOGY_AND_PERFECTION]
+ * LARU NEXUS COMMAND SYSTEM v28.0 [ALL_SEEING_EYE]
  * ------------------------------------------------------------------------------
  * AUTHOR: Takumi Saito (LARUbot President)
  * DATE: 2026-01-16
  * DESCRIPTION: 
- * カタカナ音声入力の自動正規化(Normalizer)を実装し、認識精度を100%に向上。
- * ページ更新ボタン、ログ消去ボタンを追加。
- * データ欠損を修正し、全ての機能を統合した完全版。
+ * ブラウザエージェント(Puppeteer)との完全接続。
+ * AIが取得した「視覚情報(スクリーンショット)」をチャットログにレンダリングする機能を追加。
  * ==============================================================================
  */
 
@@ -32,7 +31,7 @@ class SoundFX {
     }
   }
 
-  play(type: 'click' | 'success' | 'alert' | 'boot' | 'toggle' | 'refresh' | 'clear') {
+  play(type: 'click' | 'success' | 'alert' | 'boot' | 'toggle' | 'refresh' | 'clear' | 'camera') {
     this.init();
     if (!this.ctx) return;
     this.resume();
@@ -56,6 +55,17 @@ class SoundFX {
       osc.type = 'sine'; osc.frequency.setValueAtTime(400, now); osc.frequency.linearRampToValueAtTime(800, now + 0.2); gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.2); osc.start(now); osc.stop(now + 0.2);
     } else if (type === 'clear') {
       osc.type = 'sawtooth'; osc.frequency.setValueAtTime(200, now); osc.frequency.linearRampToValueAtTime(50, now + 0.1); gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.1); osc.start(now); osc.stop(now + 0.1);
+    } else if (type === 'camera') {
+      // シャッター音風
+      const noise = this.ctx.createBufferSource();
+      const buffer = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.1, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < buffer.length; i++) data[i] = Math.random() * 2 - 1;
+      noise.buffer = buffer;
+      noise.connect(gain);
+      gain.gain.setValueAtTime(0.5, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+      noise.start(now);
     }
   }
 }
@@ -71,13 +81,20 @@ interface ProjectData {
   stats: { cpu: number; memory: number; requests: number; errors: number; }; 
   issues: ProjectIssue[]; proposals: ProjectProposal[]; 
 }
-interface LogEntry { id: string; msg: string; type: 'user' | 'gemini' | 'sys' | 'sec' | 'alert' | 'github'; time: string; }
+// LogEntryに 'imageUrl' を追加して画像表示に対応
+interface LogEntry { 
+  id: string; 
+  msg: string; 
+  type: 'user' | 'gemini' | 'sys' | 'sec' | 'alert' | 'github' | 'browser'; 
+  imageUrl?: string; 
+  time: string; 
+}
 interface RoadmapItem { 
   id: string; category: 'AI' | 'INFRA' | 'UX' | 'SECURITY'; name: string; desc: string; benefits: string;
   status: 'PENDING' | 'DEVELOPING' | 'ACTIVE'; 
 }
 
-export default function LaruNexusV27() {
+export default function LaruNexusV28() {
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'CORE' | 'ROADMAP'>('DASHBOARD');
   const [selectedProject, setSelectedProject] = useState<ProjectData | null>(null);
   const [selectedRoadmap, setSelectedRoadmap] = useState<RoadmapItem | null>(null);
@@ -93,10 +110,10 @@ export default function LaruNexusV27() {
   const [aiGender, setAiGender] = useState<'male' | 'female'>('female');
   const [aiPersona, setAiPersona] = useState<string>('あなたは優秀なAI司令官です。冷静かつ的確に、短い言葉で報告してください。');
 
-  // --- 実プロジェクト資産データ (復元済み) ---
+  // --- 実プロジェクト資産データ (完全版) ---
   const initialProjects: Record<string, ProjectData> = {
     laru_nexus: { 
-      id: 'laru_nexus', name: 'LaruNEXUS', repoName: 'laru_nexus_core', url: 'nexus.larubot.com', status: 'WAITING', latency: 0, region: 'Tokyo (Render)', version: 'v27.3', lastDeploy: '2026-01-16 18:00',
+      id: 'laru_nexus', name: 'LaruNEXUS', repoName: 'laru_nexus_core', url: 'nexus.larubot.com', status: 'WAITING', latency: 0, region: 'Tokyo (Render)', version: 'v28.0', lastDeploy: '2026-01-16 19:00',
       stats: { cpu: 15, memory: 55, requests: 300, errors: 0 }, issues: [],
       proposals: [{ id: 'p_ln_1', type: 'FEATURE', title: '脳波コントロール連携の実装', impact: '操作性革命 (ハンズフリー)', cost: 'High' }]
     },
@@ -160,8 +177,6 @@ export default function LaruNexusV27() {
           setAiPersona(settings.persona || 'あなたは優秀なAI司令官です。');
         } catch(e){}
       }
-      
-      // 声のリストをロード（Chrome系対応）
       window.speechSynthesis.onvoiceschanged = () => {
         window.speechSynthesis.getVoices();
       };
@@ -195,27 +210,32 @@ export default function LaruNexusV27() {
     return () => clearInterval(interval);
   }, [projects]);
 
-  // --- ログ追加 & Haptics ---
-  const addLog = useCallback((msg: string, type: 'user' | 'gemini' | 'sys' | 'sec' | 'alert' | 'github' = 'sys') => {
+  // --- ログ追加 ---
+  const addLog = useCallback((msg: string, type: 'user' | 'gemini' | 'sys' | 'sec' | 'alert' | 'github' | 'browser' = 'sys', imageUrl?: string) => {
     const time = new Date().toLocaleTimeString('ja-JP', { hour12: false });
     const id = Math.random().toString(36).substr(2, 9);
-    setLogs(prev => [...prev.slice(-99), { id, msg, type, time }]);
+    setLogs(prev => [...prev.slice(-99), { id, msg, type, imageUrl, time }]);
+    
+    // SFX & Haptics
     if (type === 'sec' || type === 'alert') {
-      sfx.play('alert'); if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([100, 50, 100]);
-    } else if (type === 'sys' || type === 'github') { sfx.play('success'); }
+      sfx.play('alert'); 
+      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([100, 50, 100]);
+    } else if (type === 'sys' || type === 'github') { 
+      sfx.play('success'); 
+    } else if (type === 'browser') {
+      sfx.play('camera'); // 撮影音
+    }
   }, []);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs, isThinking]);
 
-  // --- 高品質音声合成 (True Gender Fix) ---
+  // --- 高品質音声合成 ---
   const speak = (text: string) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'ja-JP';
-    
-    // 性別によるピッチ調整
     utterance.pitch = aiGender === 'male' ? 0.9 : 1.1; 
     utterance.rate = 1.0; 
 
@@ -225,10 +245,10 @@ export default function LaruNexusV27() {
     let targetVoice;
     if (aiGender === 'female') {
       targetVoice = jpVoices.find(v => v.name.includes('Kyoko') || v.name.includes('Haruka') || v.name.includes('Ayumi') || v.name.includes('Sayaka') || v.name.includes('Google 日本語') || v.name.includes('Female'));
-      utterance.pitch = targetVoice ? 1.0 : 1.4;
+      if (!targetVoice) utterance.pitch = 1.4;
     } else {
       targetVoice = jpVoices.find(v => v.name.includes('Hattori') || v.name.includes('Ichiro') || v.name.includes('Kenji') || v.name.includes('Male'));
-      utterance.pitch = targetVoice ? 1.0 : 0.7; 
+      if (!targetVoice) utterance.pitch = 0.7;
     }
 
     if (targetVoice) utterance.voice = targetVoice;
@@ -249,9 +269,37 @@ export default function LaruNexusV27() {
   };
 
   // --- Function Calling Handler ---
-  const executeAutonomousAction = useCallback((action: any) => {
+  const executeAutonomousAction = useCallback(async (action: any) => {
     const { name, args } = action;
-    if (name === 'restart_service') {
+    
+    if (name === 'browse_website') {
+      addLog(`[視覚] ${args.url} にアクセス中...`, 'browser');
+      speak(`${args.url}を確認します。`);
+      
+      try {
+        const res = await fetch('/api/browser', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: args.url, action: args.mode })
+        });
+        const data = await res.json();
+        
+        if (data.status === 'SUCCESS') {
+          if (data.result.type === 'image') {
+            addLog(`[視覚] サイトの撮影に成功しました。`, 'browser', data.result.data);
+            speak('サイトの画像を取得しました。');
+          } else {
+            addLog(`[解析] テキストデータを取得: ${data.result.data.substring(0, 50)}...`, 'browser');
+            speak('テキスト情報を取得しました。');
+          }
+        } else {
+          addLog(`[エラー] ブラウザ操作に失敗: ${data.message}`, 'alert');
+        }
+      } catch (e) {
+        addLog(`[エラー] ブラウザエージェント接続不能`, 'alert');
+      }
+    } 
+    else if (name === 'restart_service') {
       addLog(`[統制命令] ${args.serviceId.toUpperCase()} の再起動を完了。`, 'sec');
       speak(`${args.serviceId}を再起動しました。`);
     } else if (name === 'execute_proposal') {
@@ -282,11 +330,11 @@ export default function LaruNexusV27() {
     const rawMessage = text || inputMessage;
     if (!rawMessage || isThinking) return;
     
-    // 音声入力の正規化を実行
+    // 正規化
     const messageToSend = normalizeVoiceInput(rawMessage);
 
     setIsThinking(true);
-    // ログには元の発言を表示（自然に見せるため）
+    // ユーザーの発言をログに表示
     if (!text && inputMessage) addLog(inputMessage, 'user');
     else if (text) addLog(text, 'user');
     
@@ -296,7 +344,7 @@ export default function LaruNexusV27() {
     const promptWithPersona = `[System: ${aiPersona}] User: ${messageToSend}`;
 
     try {
-      const res = await fetch(`/api/gemini?v=27.3&t=${Date.now()}`, {
+      const res = await fetch(`/api/gemini?v=28.0&t=${Date.now()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: promptWithPersona }),
@@ -322,6 +370,7 @@ export default function LaruNexusV27() {
   const startListening = () => {
     sfx.play('click');
     sfx.resume();
+    // スマホ対応: 音声合成の空打ち（アンロック）
     if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
         const dummy = new SpeechSynthesisUtterance('');
@@ -349,7 +398,6 @@ export default function LaruNexusV27() {
   const handleTabChange = (tab: any) => { setActiveTab(tab); sfx.play('click'); };
   const handleRoadmapClick = (item: RoadmapItem) => { setSelectedRoadmap(item); sfx.play('click'); };
   
-  // 新機能: ページ更新とログ消去
   const handleRefresh = () => {
     sfx.play('refresh');
     if (typeof window !== 'undefined') window.location.reload();
@@ -369,7 +417,6 @@ export default function LaruNexusV27() {
     if (gender === 'male') {
       return (
         <svg width="100" height="120" viewBox="0 0 100 120" fill="none" stroke={color} strokeWidth="1" style={{ transition: '0.2s', filter: 'drop-shadow(0 0 5px rgba(0,242,255,0.3))' }}>
-          {/* MALE: Strong Jaw, Angular */}
           <path d="M20,30 L50,10 L80,30 L85,60 L70,100 L30,100 L15,60 L20,30 Z" opacity={opacity} />
           <path d="M20,30 L50,40 L80,30 M50,10 L50,40" opacity="0.5" />
           <path d="M15,60 L30,50 L50,60 L70,50 L85,60" />
@@ -384,7 +431,6 @@ export default function LaruNexusV27() {
     } else {
       return (
         <svg width="100" height="120" viewBox="0 0 100 120" fill="none" stroke={color} strokeWidth="1" style={{ transition: '0.2s', filter: 'drop-shadow(0 0 5px rgba(0,242,255,0.3))' }}>
-          {/* FEMALE: Slender Jaw, Elegant */}
           <path d="M15,30 L50,5 L85,30 L90,55 L50,110 L10,55 L15,30 Z" opacity={opacity} />
           <path d="M15,30 L50,35 L85,30 M50,5 L50,35" opacity="0.5" />
           <path d="M10,55 L30,50 L50,60 L70,50 L90,55" />
@@ -430,6 +476,7 @@ export default function LaruNexusV27() {
         .chat-bubble { max-width: 85%; padding: 10px 14px; border-radius: 12px; font-size: 13px; margin-bottom: 10px; word-wrap: break-word; }
         .chat-user { align-self: flex-end; background: rgba(0,242,255,0.1); border: 1px solid rgba(0,242,255,0.3); }
         .chat-gemini { align-self: flex-start; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); }
+        .chat-browser { align-self: flex-start; border: 1px solid var(--neon-yellow); color: var(--neon-yellow); background: rgba(255, 234, 0, 0.05); }
         .chat-alert { align-self: center; color: var(--neon-red); font-size: 11px; border: 1px solid var(--neon-red); background: rgba(255,0,64,0.1); }
         
         /* Face Button */
@@ -453,7 +500,7 @@ export default function LaruNexusV27() {
       <header className="header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{ width: '12px', height: '12px', background: isAlert ? 'var(--neon-red)' : 'var(--neon-blue)', boxShadow: `0 0 10px ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}` }} />
-          <h1 style={{ fontSize: '14px', letterSpacing: '2px', margin: 0 }}>NEXUS_v27.3</h1>
+          <h1 style={{ fontSize: '14px', letterSpacing: '2px', margin: 0 }}>NEXUS_v28.0</h1>
         </div>
         <div style={{ display: 'flex', gap: '15px' }}>
           <button onClick={handleRefresh} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '18px', cursor: 'pointer' }}>🔄</button>
@@ -517,7 +564,11 @@ export default function LaruNexusV27() {
           </section>
           <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
             {logs.map(log => (
-              <div key={log.id} className={`chat-bubble chat-${log.type}`}>{log.msg}</div>
+              <div key={log.id} className={`chat-bubble chat-${log.type}`}>
+                <div style={{ fontSize: '9px', opacity: 0.5, marginBottom: '4px' }}>{log.type.toUpperCase()}</div>
+                {log.imageUrl && <img src={log.imageUrl} alt="Captured" style={{ width: '100%', borderRadius: '8px', marginBottom: '8px', border: '1px solid #333' }} />}
+                {log.msg}
+              </div>
             ))}
             {isThinking && <div className="chat-bubble chat-gemini" style={{ opacity: 0.5 }}>...</div>}
             <div ref={chatEndRef} />
