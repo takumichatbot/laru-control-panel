@@ -3,20 +3,19 @@ import { NextResponse } from "next/server";
 
 /**
  * ==============================================================================
- * LARU NEXUS BACKEND v25.0 [GITHUB_SYNCED_ENGINE]
+ * LARU NEXUS BACKEND v27.0 [GITHUB_SYNCED_ENGINE + BROWSER_EYE]
  * ------------------------------------------------------------------------------
  * AUTHOR: Takumi Saito (LARUbot President)
  * DESCRIPTION:
- * Gemini 2.5 Flash に「GitHub操作権限」を付与。
- * 提案実行時に実際にGitHub APIを通じてRepository Dispatchを発火させ、
- * VS Code (Local/Codespaces) 側のワークフローを駆動する。
+ * Gemini 2.5 Flash に「GitHub操作権限」と「Webブラウジング能力」を付与。
+ * 開発タスクの実行に加え、URLの視覚的・テキスト的な解析を可能にする。
  * ==============================================================================
  */
 
 // --- GitHub API 連携関数 ---
 async function callGitHubDispatch(repo: string, eventType: string, payload: any) {
   const token = process.env.GITHUB_TOKEN;
-  const owner = process.env.GITHUB_OWNER || "takumi-saito"; // デフォルト設定（要変更）
+  const owner = process.env.GITHUB_OWNER || "takumi-saito";
 
   if (!token) {
     console.warn("GITHUB_TOKEN not found. Skipping actual API call.");
@@ -48,10 +47,11 @@ async function callGitHubDispatch(repo: string, eventType: string, payload: any)
   }
 }
 
-// --- AIツール定義 ---
+// --- AIツール定義 (GitHub + Browser) ---
 const nexusTools = [
   {
     functionDeclarations: [
+      // 1. GitHub操作ツール
       {
         name: "trigger_github_action",
         description: "GitHub Actionsワークフローをトリガーし、システム変更や修復を実際に実行する。",
@@ -59,7 +59,7 @@ const nexusTools = [
           type: "OBJECT",
           properties: {
             repository: { type: "STRING", description: "対象リポジトリ名 (例: flastal_net, larubot_core)" },
-            actionType: { type: "STRING", description: "実行するアクション (例: sharding_db, restart_server, fix_css)" },
+            actionType: { type: "STRING", description: "実行するアクション (例: sharding_db, restart_service, fix_css)" },
             details: { type: "STRING", description: "変更の詳細内容" }
           },
           required: ["repository", "actionType"]
@@ -91,13 +91,26 @@ const nexusTools = [
       },
       {
         name: "explain_roadmap_strategy",
-        description: "ロードマップ上の技術（脳波連携、量子暗号など）について、導入メリットや具体的な実装ステップを解説する。",
+        description: "ロードマップ上の技術について、導入メリットや具体的な実装ステップを解説する。",
         parameters: {
           type: "OBJECT",
           properties: {
             technology: { type: "STRING", description: "技術名" }
           },
           required: ["technology"]
+        }
+      },
+      // 2. ブラウザ操作ツール (新規追加)
+      {
+        name: "browse_website",
+        description: "指定されたURLにアクセスし、Webサイトの内容を確認する。デザイン確認ならscreenshot、情報収集ならscrapeを使用。",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            url: { type: "STRING", description: "アクセスするURL (https://...)" },
+            mode: { type: "STRING", description: "実行モード: 'screenshot' (画像取得) または 'scrape' (テキスト取得)" }
+          },
+          required: ["url", "mode"]
         }
       }
     ]
@@ -108,6 +121,7 @@ export async function POST(req: Request) {
   try {
     const { message } = await req.json();
 
+    // APIキー処理
     const rawKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
     if (!rawKey) throw new Error("API_KEY_MISSING");
     const cleanKey = rawKey.replace(/[\s\t\n\r\u200B-\u200D\uFEFF]/g, '').trim();
@@ -126,14 +140,14 @@ export async function POST(req: Request) {
             あなたは齋藤社長の専属AI司令官『LaruNexus』です。
             社長は「本物」を求めています。「できない」という回答は禁止です。
             
-            1. システム変更の命令（DB分割、再起動など）が来たら、必ず 'trigger_github_action' を呼んでください。
-            2. ロードマップの質問には、'explain_roadmap_strategy' を使いつつ、技術的な知見を熱く語ってください。
-            3. プロジェクト名は正確に識別してください（FLASTAL.NET -> flastal_net, LARUBOT -> larubot_core 等と推測して渡すこと）。
+            1. システム変更の命令が来たら、'trigger_github_action' を使用。
+            2. 「サイトを見て」「確認して」と言われたら、迷わず 'browse_website' を使用して視覚的に確認してください。
+            3. プロジェクト名は正確に識別してください。
           `}],
         },
         {
           role: "model",
-          parts: [{ text: "了解しました。LaruNexus、GitHub連携モードで起動。全コマンドを実リポジトリへ反映させます。" }],
+          parts: [{ text: "了解しました。LaruNexus、GitHub連携およびブラウジングモジュール起動完了。全領域をカバーします。" }],
         },
       ],
     });
@@ -145,16 +159,14 @@ export async function POST(req: Request) {
     if (functionCalls && functionCalls.length > 0) {
       console.log("NEXUS_ACTION:", JSON.stringify(functionCalls, null, 2));
 
-      // 実際にGitHub APIを叩く処理（非同期で実行）
-      // ※レスポンス速度優先のため、awaitせず裏で走らせるか、ここでawaitするかは要件次第。
-      // 今回は確実性を重視して簡易的にログ出力のみ行い、クライアントへ返す。
-      // 本番環境でTokenがある場合のみ callGitHubDispatch が動く想定。
-      
+      // GitHub連携のみバックエンドで処理 (ブラウザ操作はクライアント側または別ルートで処理させるため、ここではFCを返す)
       for (const call of functionCalls) {
         if (call.name === 'trigger_github_action') {
           const { repository, actionType } = call.args as any;
           await callGitHubDispatch(repository, 'laru_command', { action: actionType });
         }
+        // browse_website の場合は、フロントエンド側で api/browser を叩くフローになるため、
+        // ここではAPIを実行せず、FunctionCall情報をそのまま返す。
       }
 
       return NextResponse.json({ 
