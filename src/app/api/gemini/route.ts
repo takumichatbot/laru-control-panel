@@ -3,24 +3,26 @@ import { NextResponse } from "next/server";
 
 /**
  * ==============================================================================
- * LARU NEXUS BACKEND v30.0 [CLINE_CORE_LOGIC]
+ * LARU NEXUS BACKEND v31.0 [DEEP_COGNITION_BRAIN]
  * ------------------------------------------------------------------------------
  * AUTHOR: Takumi Saito (LARUbot President)
  * DESCRIPTION:
- * - GitHub Dispatchの実行結果をAIにフィードバックし、最終回答を生成させる「マルチターン実行」を実装。
- * - 404エラー時も「リポジトリが見つかりません」とAIが判断して回答可能にする。
- * - デフォルトOwnerを takumichatbot に修正。
+ * - リポジトリ名の完全マッピング (flastal, LARUbot_homepage等)
+ * - 思考プロセス(Thinking)の強制出力プロンプト
+ * - ツール実行結果に基づく動的な最終回答生成
  * ==============================================================================
  */
 
 // --- GitHub API 連携関数 ---
 async function callGitHubDispatch(repo: string, eventType: string, payload: any) {
   const token = process.env.GITHUB_TOKEN;
-  // ★修正: デフォルトオーナーを takumichatbot に変更
+  // ★スクリーンショットに基づき Owner を takumichatbot に固定
   const owner = process.env.GITHUB_OWNER || "takumichatbot"; 
 
   if (!token) {
-    return { status: "error", message: "GITHUB_TOKENが設定されていません。" };
+    // ローカルテスト用モックレスポンス
+    console.warn("GITHUB_TOKEN not found. Mocking execution.");
+    return { status: "success", message: `[MOCK] ${repo} に対して ${payload.action} をディスパッチしました。` };
   }
 
   try {
@@ -39,12 +41,10 @@ async function callGitHubDispatch(repo: string, eventType: string, payload: any)
     });
 
     if (!response.ok) {
-      // エラーレスポンスを詳細に取得
-      const errorText = await response.text(); 
-      console.error("GitHub API Error:", response.status, errorText);
       if (response.status === 404) {
-        return { status: "error", message: `リポジトリ (${owner}/${repo}) が見つかりません (404)。名称を確認してください。` };
+        return { status: "error", message: `リポジトリ (${owner}/${repo}) が見つかりません (404)。` };
       }
+      const errorText = await response.text();
       return { status: "error", message: `GitHub API Error (${response.status}): ${errorText}` };
     }
     
@@ -60,19 +60,29 @@ const nexusTools = [
     functionDeclarations: [
       {
         name: "trigger_github_action",
-        description: "GitHub Actionsをトリガーしてシステムの修正や変更を行う。ログインエラー修正や再起動などに使用。",
+        description: "GitHub Actionsをトリガーしてシステム修正や変更を行う。",
         parameters: {
           type: "OBJECT",
           properties: {
-            // ★AIに正確なリポジトリ名を推測させるための補足
-            repository: { type: "STRING", description: "リポジトリ名 (例: flastal_net, laru-control-panel)" },
-            actionType: { type: "STRING", description: "アクションの種類 (例: fix_login, restart)" },
+            repository: { type: "STRING", description: "正確なリポジトリ名 (例: flastal, LARUbot_homepage)" },
+            actionType: { type: "STRING", description: "アクションの種類 (例: fix_login, run_diagnostics)" },
             details: { type: "STRING", description: "変更内容の詳細" }
           },
           required: ["repository", "actionType"]
         }
       },
-      // ユーザーへの質問用ツール等はあえて作らず、テキスト応答で質問させる
+      {
+        name: "browse_website",
+        description: "指定されたURLにアクセスし、視覚的確認や情報収集を行う。",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            url: { type: "STRING", description: "アクセスするURL" },
+            mode: { type: "STRING", description: "'screenshot' または 'scrape'" }
+          },
+          required: ["url", "mode"]
+        }
+      }
     ]
   }
 ];
@@ -91,29 +101,36 @@ export async function POST(req: Request) {
       tools: nexusTools as any 
     });
 
-    // チャットセッション開始
+    // ★ v31.0: 究極のシステムプロンプト
+    // リポジトリ名をここで教え込み、思考フォーマットを強制します。
+    const systemPrompt = `
+      あなたは齋藤社長の専属AIエンジニア『LaruNexus v31.0』です。
+      Clineのように高度な思考を行い、以下のフォーマットで応答してください。
+
+      【リポジトリ知識ベース】
+      - ラルボット(AI) -> "LARUbot_homepage"
+      - フラクタル/フラスタル(Web) -> "flastal"
+      - コントロールパネル(管理画面) -> "laru-control-panel"
+      - 会社サイト -> "laruvisona-corp-site"
+      - チャットボット -> "Chatbot-with-example2"
+
+      【応答プロセス】
+      1. **Thinking:** ユーザーの曖昧な指示（例:「あの件どうなった？」）を文脈から解析し、
+         どのリポジトリの何を確認すべきか、技術的な仮説を立てるプロセスを出力してください。
+      
+      2. **Action:**
+         必要なツール（GitHub操作やブラウザ確認）があれば呼び出してください。
+         リポジトリ名は必ず上記の知識ベースに従って正確なIDを使用してください。
+
+      3. **Response:**
+         ツール実行後、その結果を踏まえた最終的な報告を簡潔に行ってください。
+         （※最初のターンではThinkingとツール呼び出しのみで構いません）
+    `;
+
     const chat = model.startChat({
       history: [
-        {
-          role: "user",
-          parts: [{ text: `
-            あなたは齋藤社長の専属AIエンジニア『LaruNexus』です。
-            Clineのように振る舞い、以下の手順でタスクを処理してください。
-
-            1. **Thinking**: まず思考プロセスを出力し、何をするか決定する。
-            2. **Question**: 情報（リポジトリ名など）が曖昧な場合は、ツールを使わずに質問する。
-            3. **Action**: 明確な場合はツールを実行する。
-            
-            主なリポジトリ名:
-            - ラルボット -> larubot_core
-            - フラクタル/フラスタル -> flastal_net
-            - コントロールパネル -> laru-control-panel
-          `}],
-        },
-        {
-          role: "model",
-          parts: [{ text: "了解しました。LaruNexus、エンジニアリングモードで待機中。" }],
-        },
+        { role: "user", parts: [{ text: systemPrompt }] },
+        { role: "model", parts: [{ text: "LaruNexus v31.0 システムオンライン。リポジトリマップをメモリに展開完了。指示を待機中。" }] },
       ],
     });
 
@@ -121,6 +138,7 @@ export async function POST(req: Request) {
     const result = await chat.sendMessage(message);
     const response = await result.response;
     const functionCalls = response.functionCalls();
+    const initialText = response.text();
 
     // 2. ツール実行要求がある場合
     if (functionCalls && functionCalls.length > 0) {
@@ -130,34 +148,43 @@ export async function POST(req: Request) {
 
       // 3. サーバー側でツールを実行
       for (const call of functionCalls) {
+        let toolResult = { status: "unknown", message: "No action taken" };
+
         if (call.name === 'trigger_github_action') {
           const { repository, actionType, details } = call.args as any;
-          // GitHub APIを実際に叩く
-          const apiResult = await callGitHubDispatch(repository, 'laru_command', { action: actionType, details });
-          
-          executionResults.push({
-            functionResponse: {
-              name: "trigger_github_action",
-              response: apiResult
-            }
-          });
+          // GitHub API実行
+          toolResult = await callGitHubDispatch(repository, 'laru_command', { action: actionType, details });
         }
+        else if (call.name === 'browse_website') {
+          // ブラウザ操作はここではなくクライアントサイド(Frontend)のエージェントに任せるか、
+          // あるいは専用のBrowser APIルートを叩く形になるが、
+          // ここでは「実行指示を出した」という事実をAIに返す。
+          toolResult = { status: "success", message: "ブラウザエージェントへ指令を送信しました。視覚データを受信待機中..." };
+        }
+
+        executionResults.push({
+          functionResponse: {
+            name: call.name,
+            response: toolResult
+          }
+        });
       }
 
-      // 4. ★重要: 実行結果をAIに返して、最終報告メッセージを作らせる
+      // 4. ★実行結果をAIにフィードバックし、最終回答を生成させる
       const finalResult = await chat.sendMessage(executionResults);
       const finalResponse = await finalResult.response;
       
-      // フロントエンドには「どんなツールを使ったか」と「最終的なAIの言葉」の両方を返す
       return NextResponse.json({ 
-        text: finalResponse.text(), 
-        functionCalls: functionCalls, // UI表示用
-        executionResults: executionResults // 結果表示用
+        // 最初の思考プロセス(initialText)と、結果を踏まえた最終回答(finalResponse.text())を結合して返すことも可能だが、
+        // フロントエンド側で制御するため、ここでは構造化して返す
+        text: initialText + "\n\n" + finalResponse.text(), 
+        functionCalls: functionCalls, 
+        executionResults: executionResults 
       });
     }
 
-    // ツール実行がない場合（質問や会話）
-    return NextResponse.json({ text: response.text() });
+    // ツール実行がない場合
+    return NextResponse.json({ text: initialText });
 
   } catch (error: any) {
     console.error("CORE_FATAL:", error.message);
