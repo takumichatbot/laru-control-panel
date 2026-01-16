@@ -4,14 +4,14 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 
 /**
  * ==============================================================================
- * LARU NEXUS COMMAND SYSTEM v27.1 [FINAL_SYNC_VERSION]
+ * LARU NEXUS COMMAND SYSTEM v27.2 [TRUE_VOICE_FIX]
  * ------------------------------------------------------------------------------
  * AUTHOR: Takumi Saito (LARUbot President)
  * DATE: 2026-01-16
  * DESCRIPTION: 
- * ダッシュボードデータの完全復元。
- * 顔グラフィックを「美しいローポリゴンメッシュ」に刷新(SVG)。
- * AIペルソナの自由記述設定、スマホ音声再生の強制アンロック機能を実装。
+ * 音声エンジンを刷新。OS固有のボイスID(Kyoko, Haruka等)を名指しで指定し、
+ * 確実に男女の声色を使い分けるロジックを実装。
+ * 顔グラフィックを「知的で美しいローポリゴン」に最終調整。
  * ==============================================================================
  */
 
@@ -93,7 +93,7 @@ export default function LaruNexusV27() {
   // --- 実プロジェクト資産データ (完全版) ---
   const initialProjects: Record<string, ProjectData> = {
     laru_nexus: { 
-      id: 'laru_nexus', name: 'LaruNEXUS', repoName: 'laru_nexus_core', url: 'nexus.larubot.com', status: 'WAITING', latency: 0, region: 'Tokyo (Render)', version: 'v27.1', lastDeploy: '2026-01-16 16:00',
+      id: 'laru_nexus', name: 'LaruNEXUS', repoName: 'laru_nexus_core', url: 'nexus.larubot.com', status: 'WAITING', latency: 0, region: 'Tokyo (Render)', version: 'v27.2', lastDeploy: '2026-01-16 17:00',
       stats: { cpu: 15, memory: 55, requests: 300, errors: 0 }, issues: [],
       proposals: [{ id: 'p_ln_1', type: 'FEATURE', title: '脳波コントロール連携の実装', impact: '操作性革命 (ハンズフリー)', cost: 'High' }]
     },
@@ -143,7 +143,7 @@ export default function LaruNexusV27() {
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // --- 永続化: 起動時にLocalStorageから状態を復元 ---
+  // --- 永続化 (設定も保存) ---
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedProjects = localStorage.getItem('laru_nexus_v27_projects');
@@ -157,7 +157,11 @@ export default function LaruNexusV27() {
           setAiPersona(settings.persona || 'あなたは優秀なAI司令官です。');
         } catch(e){}
       }
-      window.speechSynthesis.getVoices();
+      
+      // 声のリストをロード（Chrome系対応）
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices();
+      };
     }
   }, []);
 
@@ -200,29 +204,48 @@ export default function LaruNexusV27() {
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs, isThinking]);
 
-  // --- 高品質音声合成 (Gender Tuned) ---
+  // --- 高品質音声合成 (True Gender Fix) ---
   const speak = (text: string) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
-    
-    // スマホ対応: ユーザーアクション内であることを保証する試み
-    // (通常はクリックイベント内で呼ぶ必要があるが、非同期処理後だとブロックされることがある。
-    //  そのため、startListening時などに空の音声を再生しておく「アンロック」技が有効だが、ここでは基本実装のみ)
     window.speechSynthesis.cancel();
     
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'ja-JP';
     
-    // 性別によるピッチ調整 (自然な範囲で)
-    utterance.pitch = aiGender === 'male' ? 0.9 : 1.1; 
-    utterance.rate = 1.0; 
-
     const voices = window.speechSynthesis.getVoices();
-    const jpVoices = voices.filter(v => v.lang === 'ja-JP');
-    
-    // Google Neural系があれば優先、なければOS標準
-    let targetVoice = jpVoices.find(v => v.name.includes('Google') && v.name.includes('Neural')) || jpVoices[0];
-    
+    const jpVoices = voices.filter(v => v.lang.includes('ja') || v.lang.includes('JP'));
+
+    let targetVoice;
+
+    if (aiGender === 'female') {
+      // 女性声のキーワード検索
+      targetVoice = jpVoices.find(v => 
+        v.name.includes('Kyoko') || // Mac/iOS
+        v.name.includes('Haruka') || // Windows
+        v.name.includes('Ayumi') || // Windows
+        v.name.includes('Sayaka') || // Windows
+        v.name.includes('Google 日本語') || // Chrome (比較的女性っぽい)
+        v.name.includes('Female')
+      );
+      // 声が見つかればピッチ標準、なければ高め
+      utterance.pitch = targetVoice ? 1.0 : 1.4;
+    } else {
+      // 男性声のキーワード検索
+      targetVoice = jpVoices.find(v => 
+        v.name.includes('Hattori') || // Mac
+        v.name.includes('Ichiro') || // Windows
+        v.name.includes('Kenji') || // Windows
+        v.name.includes('Male')
+      );
+      // 声が見つかればピッチ標準、なければ低め
+      utterance.pitch = targetVoice ? 1.0 : 0.7; 
+    }
+
     if (targetVoice) utterance.voice = targetVoice;
+    
+    // 速度は少し早めが知的
+    utterance.rate = 1.1; 
+
     window.speechSynthesis.speak(utterance);
   };
 
@@ -271,7 +294,7 @@ export default function LaruNexusV27() {
     const promptWithPersona = `[System: ${aiPersona}] User: ${messageToSend}`;
 
     try {
-      const res = await fetch(`/api/gemini?v=27.1&t=${Date.now()}`, {
+      const res = await fetch(`/api/gemini?v=27.2&t=${Date.now()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: promptWithPersona }),
@@ -301,7 +324,9 @@ export default function LaruNexusV27() {
     // スマホ対応: 音声合成の空打ち（アンロック）
     if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+        const dummy = new SpeechSynthesisUtterance('');
+        dummy.volume = 0; // 無音
+        window.speechSynthesis.speak(dummy);
     }
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -324,59 +349,52 @@ export default function LaruNexusV27() {
   const handleTabChange = (tab: any) => { setActiveTab(tab); sfx.play('click'); };
   const handleRoadmapClick = (item: RoadmapItem) => { setSelectedRoadmap(item); sfx.play('click'); };
 
-  // --- Low-Poly Wireframe Face (SVG) ---
-  // 頂いた画像を参考に、幾何学的なメッシュで顔を構成
+  // --- Beautiful Low-Poly Face (SVG) ---
   const LowPolyFace = ({ gender, active, level }: { gender: 'male' | 'female', active: boolean, level: number }) => {
-    const mouthOpen = active ? Math.min(15, level / 4) : 0;
-    const eyeColor = active ? "var(--neon-red)" : "var(--neon-blue)";
-    const strokeW = 1.0;
+    // 口の開閉アニメーション
+    const mouthY = active ? Math.min(10, level / 5) : 0;
+    const color = active ? "var(--neon-red)" : "var(--neon-blue)";
+    const opacity = active ? 1 : 0.6;
 
     if (gender === 'male') {
       return (
-        <svg width="80" height="90" viewBox="0 0 100 110" fill="none" stroke={eyeColor} strokeWidth={strokeW} style={{ transition: '0.2s' }}>
+        <svg width="100" height="120" viewBox="0 0 100 120" fill="none" stroke={color} strokeWidth="1" style={{ transition: '0.2s', filter: 'drop-shadow(0 0 5px rgba(0,242,255,0.3))' }}>
           {/* MALE: Strong Jaw, Angular */}
           {/* Outline */}
-          <path d="M30,10 L70,10 L90,30 L90,60 L70,95 L30,95 L10,60 L10,30 Z" />
-          {/* Forehead */}
-          <path d="M30,10 L50,30 L70,10 M50,30 L50,50" />
-          {/* Eyes Area */}
-          <path d="M10,30 L30,35 L50,30 L70,35 L90,30" />
-          <path d="M10,30 L20,45 L30,35 M90,30 L80,45 L70,35" />
-          {/* Cheeks */}
-          <path d="M10,60 L20,45 L35,55 L25,80 L10,60" />
-          <path d="M90,60 L80,45 L65,55 L75,80 L90,60" />
+          <path d="M20,30 L50,10 L80,30 L85,60 L70,100 L30,100 L15,60 L20,30 Z" opacity={opacity} />
+          {/* Internal Structure */}
+          <path d="M20,30 L50,40 L80,30 M50,10 L50,40" opacity="0.5" />
+          <path d="M15,60 L30,50 L50,60 L70,50 L85,60" />
+          <path d="M30,50 L20,30 M70,50 L80,30" opacity="0.5" />
+          {/* Eyes */}
+          <path d="M25,45 L35,40 L45,45 L35,50 Z" fill={active ? "rgba(255,0,64,0.1)" : "rgba(0,242,255,0.1)"} />
+          <path d="M55,45 L65,40 L75,45 L65,50 Z" fill={active ? "rgba(255,0,64,0.1)" : "rgba(0,242,255,0.1)"} />
           {/* Nose */}
-          <path d="M50,30 L40,50 L50,60 L60,50 Z" />
-          <path d="M40,50 L35,55 M60,50 L65,55" />
-          {/* Mouth (Animates) */}
-          <path d={`M35,75 L50,${75 + mouthOpen} L65,75 L50,${70 - mouthOpen/2} Z`} />
-          <path d={`M35,75 L25,80 M65,75 L75,80`} />
-          {/* Chin */}
-          <path d="M25,80 L30,95 M75,80 L70,95 M30,95 L50,85 L70,95" />
+          <path d="M50,40 L45,65 L50,75 L55,65 Z" />
+          {/* Mouth */}
+          <path d={`M35,85 L50,${85 + mouthY} L65,85`} strokeWidth="1.5" />
+          {/* Jaw */}
+          <path d="M30,100 L50,90 L70,100" opacity="0.5" />
         </svg>
       );
     } else {
       return (
-        <svg width="80" height="90" viewBox="0 0 100 110" fill="none" stroke={eyeColor} strokeWidth={strokeW} style={{ transition: '0.2s' }}>
-          {/* FEMALE: Tapered Jaw, Larger Eye Area */}
+        <svg width="100" height="120" viewBox="0 0 100 120" fill="none" stroke={color} strokeWidth="1" style={{ transition: '0.2s', filter: 'drop-shadow(0 0 5px rgba(0,242,255,0.3))' }}>
+          {/* FEMALE: Slender Jaw, Elegant */}
           {/* Outline */}
-          <path d="M30,10 L70,10 L95,30 L85,55 L50,100 L15,55 L5,30 Z" />
-          {/* Forehead */}
-          <path d="M30,10 L50,35 L70,10 M50,35 L50,55" />
-          {/* Eyes Area */}
-          <path d="M5,30 L30,40 L50,35 L70,40 L95,30" />
-          <path d="M5,30 L20,50 L30,40 M95,30 L80,50 L70,40" />
-          {/* Cheeks */}
-          <path d="M15,55 L20,50 L35,60 L30,80 L15,55" />
-          <path d="M85,55 L80,50 L65,60 L70,80 L85,55" />
+          <path d="M15,30 L50,5 L85,30 L90,55 L50,110 L10,55 L15,30 Z" opacity={opacity} />
+          {/* Internal */}
+          <path d="M15,30 L50,35 L85,30 M50,5 L50,35" opacity="0.5" />
+          <path d="M10,55 L30,50 L50,60 L70,50 L90,55" />
+          {/* Eyes (Larger) */}
+          <path d="M20,45 L35,38 L50,45 L35,52 Z" fill={active ? "rgba(255,0,64,0.1)" : "rgba(0,242,255,0.1)"} />
+          <path d="M50,45 L65,38 L80,45 L65,52 Z" fill={active ? "rgba(255,0,64,0.1)" : "rgba(0,242,255,0.1)"} />
           {/* Nose */}
-          <path d="M50,35 L42,55 L50,62 L58,55 Z" />
-          <path d="M42,55 L35,60 M58,55 L65,60" />
-          {/* Mouth (Animates) */}
-          <path d={`M35,78 L50,${78 + mouthOpen} L65,78 L50,${74 - mouthOpen/2} Z`} />
-          <path d={`M35,78 L30,80 M65,78 L70,80`} />
+          <path d="M50,35 L46,65 L50,70 L54,65 Z" />
+          {/* Mouth */}
+          <path d={`M38,82 L50,${82 + mouthY} L62,82`} strokeWidth="1.5" />
           {/* Chin */}
-          <path d="M30,80 L50,100 L70,80 M50,62 L50,74" />
+          <path d="M35,90 L50,110 L65,90" opacity="0.5" />
         </svg>
       );
     }
@@ -411,10 +429,10 @@ export default function LaruNexusV27() {
         .detail-panel { width: 100%; max-width: 600px; max-height: 85vh; background: #111; border: 1px solid var(--neon-blue); border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; }
         .detail-header { padding: 16px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; background: rgba(0,242,255,0.05); }
         .detail-content { padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
+        .roadmap-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border-bottom: 1px solid #222; cursor: pointer; }
         .chat-bubble { max-width: 85%; padding: 10px 14px; border-radius: 12px; font-size: 13px; margin-bottom: 10px; word-wrap: break-word; }
         .chat-user { align-self: flex-end; background: rgba(0,242,255,0.1); border: 1px solid rgba(0,242,255,0.3); }
         .chat-gemini { align-self: flex-start; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); }
-        .chat-alert { align-self: center; color: var(--neon-red); font-size: 11px; border: 1px solid var(--neon-red); background: rgba(255,0,64,0.1); }
         
         /* Face Button */
         .voice-hud { position: relative; width: 120px; height: 120px; margin-top: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
@@ -437,7 +455,7 @@ export default function LaruNexusV27() {
       <header className="header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{ width: '12px', height: '12px', background: isAlert ? 'var(--neon-red)' : 'var(--neon-blue)', boxShadow: `0 0 10px ${isAlert ? 'var(--neon-red)' : 'var(--neon-blue)'}` }} />
-          <h1 style={{ fontSize: '14px', letterSpacing: '2px', margin: 0 }}>NEXUS_v27.1</h1>
+          <h1 style={{ fontSize: '14px', letterSpacing: '2px', margin: 0 }}>NEXUS_v27.2</h1>
         </div>
         <button onClick={() => setShowSettings(true)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '18px', cursor: 'pointer' }}>⚙️</button>
       </header>
