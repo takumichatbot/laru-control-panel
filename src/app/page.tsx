@@ -529,6 +529,8 @@ export default function LaruNexusInfinityCore() {
       if (isLive) setAudioLevel(Math.random() * 80);
     }, 100);
 
+    
+
     return () => {
       ws.current?.close();
       clearInterval(audioMonitor);
@@ -1038,6 +1040,65 @@ export default function LaruNexusInfinityCore() {
        </div>
     </div>
   );
+
+  const DashboardPanel = () => (
+    <div className="flex-1 p-6 md:p-12 space-y-10 overflow-y-auto pb-24 md:pb-12 scrollbar-hide">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-6">
+        <div>
+          <h2 className="text-sm font-black text-white tracking-[0.6em] uppercase border-l-4 border-cyan-500 pl-5 mb-2 italic shadow-2xl">監視グリッド</h2>
+          <p className="text-[10px] text-cyan-950 font-black tracking-widest ml-4 uppercase opacity-60 italic">Saito Holdings Integrated Network Environment</p>
+        </div>
+        <div className="flex items-center gap-6 text-[10px] font-black text-cyan-800 bg-cyan-900/10 px-8 py-3 rounded-[3rem] border border-cyan-900/30 backdrop-blur-3xl shadow-inner">
+           <div className="flex items-center gap-2"><Wifi size={14}/> LINK: {isConnected ? <span className="text-green-500 shadow-[0_0_10px_#22c55e]">SECURE</span> : <span className="text-red-600 animate-pulse">OFFLINE</span>}</div>
+           <div className="w-px h-5 bg-cyan-900/40" />
+           <div className="flex items-center gap-2"><CpuIcon size={14}/> NODES: {projects.length} ACTIVE</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+        {/* 自社資産 */}
+        <section className="space-y-6">
+          <div className="flex items-center gap-3 text-[11px] text-cyan-600 font-black uppercase tracking-[0.4em] px-3 italic">
+            <Building2 size={16}/> Saito_Corp_Assets
+          </div>
+          <div className="grid gap-4">
+            {projects.filter(p => p.category === 'COMPANY').map((p: ProjectData) => (
+              <ProjectCard key={p.id} project={p} onAction={() => setSelectedProject(p)} />
+            ))}
+          </div>
+        </section>
+
+        {/* 受託案件 */}
+        <section className="space-y-6">
+          <div className="flex items-center gap-3 text-[11px] text-yellow-600 font-black uppercase tracking-[0.4em] px-3 italic">
+            <Briefcase size={16}/> Client_Contracts
+          </div>
+          <div className="grid gap-4">
+            {projects.filter(p => p.category === 'CLIENT').map((p: ProjectData) => (
+              <ProjectCard key={p.id} project={p} onAction={() => setSelectedProject(p)} isClient />
+            ))}
+          </div>
+        </section>
+      </div>
+
+      {/* 統合インフラ・マトリックス */}
+      <div className="border border-cyan-900/20 bg-cyan-950/5 rounded-[4rem] p-12 shadow-[0_0_100px_rgba(0,0,0,1)] relative overflow-hidden group">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/5 rounded-full blur-[150px] pointer-events-none group-hover:scale-150 transition-transform duration-[3s]" />
+        <h3 className="text-xs font-black text-cyan-500 tracking-[0.8em] flex items-center gap-6 mb-20 uppercase italic underline underline-offset-[16px] decoration-cyan-900">
+          <HardDrive size={24}/> Neural Hardware Matrix
+        </h3>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-16">
+           <QuantumGauge label="NEURAL CPU" value={82} unit="GHz" />
+           <QuantumGauge label="HBM VRAM" value={54} unit="GB" color={COLORS.magenta} />
+           <QuantumGauge label="DATA FLUX" value={98} unit="GBPS" color={COLORS.green} />
+           <QuantumGauge label="NODE TEMP" value={31} unit="°C" color={COLORS.yellow} />
+        </div>
+      </div>
+    </div>
+  );
+  
+  // --- 修正: CommandPanel も同様に不足している可能性があるため念のため定義 ---
+  const CommandPanel = CommandView;
 
   // --- F. 統合レンダリング・フレームワーク ---
 
