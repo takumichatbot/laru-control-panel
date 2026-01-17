@@ -686,105 +686,79 @@ export default function LaruNexusInfinityCore() {
 
   /**
    * 司令コンソール (CommandView)
+   * 修正版：入力エリアとマイクボタンを大幅に小型化
    */
   const CommandView = () => (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-br from-black to-[#080808] relative">
-      {/* 司令部 HUD */}
-      <div className="p-8 md:p-10 flex items-center justify-between border-b border-cyan-900/20 bg-black/60 backdrop-blur-3xl shadow-2xl z-40">
-        <div className="flex items-center gap-10">
+      {/* 司令部 HUD (ヘッダー下) */}
+      <div className="px-6 py-4 flex items-center justify-between border-b border-cyan-900/20 bg-black/60 backdrop-blur-3xl z-40">
+        <div className="flex items-center gap-4">
           <div className="relative group cursor-pointer" onClick={() => sfx.play('click')}>
-             <motion.div animate={{ scale: isLive ? [1, 1.2, 1] : 1, rotate: isThinking ? [0, 5, -5, 0] : 0 }} transition={{ duration: 0.5, repeat: Infinity }}>
-               <svg width="70" height="90" viewBox="0 0 100 120" fill="none" stroke={isThinking ? COLORS.cyan : "#222"} strokeWidth="3" className="transition-all duration-700 filter drop-shadow-[0_0_20px_rgba(0,242,255,0.4)]">
+             {/* アイコンサイズ調整 */}
+             <motion.div animate={{ scale: isLive ? [1, 1.1, 1] : 1 }} className="w-8 h-8">
+               <svg viewBox="0 0 100 120" fill="none" stroke={isThinking ? COLORS.cyan : "#444"} strokeWidth="6" className="w-full h-full drop-shadow-lg">
                   <path d="M15,30 L50,5 L85,30 L90,55 L50,110 L10,55 L15,30 Z" className="opacity-80" />
-                  <circle cx="35" cy="45" r="1.5" fill={isThinking ? COLORS.cyan : "#111"} />
-                  <circle cx="65" cy="45" r="1.5" fill={isThinking ? COLORS.cyan : "#111"} />
-                  <path d={`M38,85 Q50,${85 + (audioLevel / 4)} 62,85`} stroke={isThinking ? COLORS.cyan : "#333"} strokeWidth="4" />
+                  <circle cx="35" cy="45" r="3" fill={isThinking ? COLORS.cyan : "#222"} />
+                  <circle cx="65" cy="45" r="3" fill={isThinking ? COLORS.cyan : "#222"} />
                </svg>
              </motion.div>
-             {isThinking && <div className="absolute -inset-6 border-2 border-cyan-500/10 rounded-full animate-ping" />}
           </div>
           <div className="flex flex-col">
-            <span className="text-[12px] font-black text-cyan-800 uppercase italic mb-3 tracking-[0.5em] opacity-80 decoration-cyan-900 underline underline-offset-8">Cognitive Nexus V8.5</span>
-            <h2 className="text-3xl text-white font-black tracking-[0.4em] uppercase italic italic drop-shadow-[0_0_30px_rgba(255,255,255,0.2)]">Gemini 2.5 Infinity</h2>
+            <span className="text-[10px] font-bold text-cyan-800 uppercase tracking-widest leading-none">Gemini 2.5</span>
+            <span className="text-sm text-white font-black tracking-widest uppercase italic">Infinity Core</span>
           </div>
         </div>
-        <div className="hidden lg:flex items-center gap-16 font-black italic">
-           <Metric label="CNS_UPTIME" value="2048:12:45" />
-           <Metric label="SECURITY_LV" value={`TIER ${securityLevel}`} color="text-red-600" />
-           <div className="w-px h-16 bg-cyan-900/30" />
-           <div className="flex items-center gap-5 bg-black/60 px-8 py-4 rounded-3xl border border-white/5 shadow-inner">
-              <div className="w-3.5 h-3.5 rounded-full bg-green-500 shadow-[0_0_20px_#22c55e] animate-pulse" />
-              <span className="text-[13px] text-white uppercase tracking-[0.4em] font-black">Neural_Optimal</span>
-           </div>
+        {/* PC用ステータス（スマホ非表示） */}
+        <div className="hidden lg:flex items-center gap-8 font-bold italic">
+           <Metric label="UPTIME" value="2048h" />
+           <Metric label="SEC_LV" value={`${securityLevel}`} color="text-red-500" />
         </div>
       </div>
 
       {/* ログストリーム */}
-      <div className="flex-1 overflow-y-auto p-12 space-y-12 scrollbar-hide bg-gradient-to-t from-black via-transparent to-transparent">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scrollbar-hide bg-gradient-to-t from-black via-transparent to-transparent">
         <AnimatePresence initial={false}>
           {logs.map((log: LogEntry) => (
-            <motion.div key={log.id} initial={{ opacity: 0, y: 50, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.6, ease: "easeOut" }} className={`flex flex-col ${log.type === 'user' ? 'items-end' : 'items-start'}`}>
-              <div className="text-[12px] text-gray-800 mb-3 font-black flex gap-5 uppercase tracking-[0.4em] italic px-5">
+            <motion.div key={log.id} initial={{ opacity: 0, y: 20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className={`flex flex-col ${log.type === 'user' ? 'items-end' : 'items-start'}`}>
+              <div className="text-[10px] text-gray-500 mb-1 font-bold flex gap-3 uppercase tracking-wider px-2">
                 <span>[{log.time}]</span>
-                <span className={log.type === 'user' ? 'text-white' : log.type === 'gemini' ? 'text-cyan-500 underline underline-offset-4' : 'text-gray-600'}>{log.type}</span>
+                <span className={log.type === 'user' ? 'text-white' : 'text-cyan-500'}>{log.type}</span>
               </div>
-              <div className={`max-w-[95%] md:max-w-[80%] px-10 py-7 rounded-[4rem] text-[18px] leading-loose shadow-2xl transition-all border group hover:border-cyan-500/30 duration-1000 ${
-                log.type === 'user' ? 'bg-cyan-900/25 border-cyan-500/50 text-white shadow-cyan-900/20 shadow-inner' : 
-                log.type === 'browser' ? 'border-yellow-500/40 bg-yellow-500/5 text-yellow-100 italic font-medium' :
-                log.type === 'sec' ? 'bg-red-950/20 border-red-500/40 text-red-100 shadow-red-900/20' :
+              <div className={`max-w-[90%] md:max-w-[70%] px-5 py-3 rounded-2xl text-sm md:text-base leading-relaxed shadow-lg border ${
+                log.type === 'user' ? 'bg-cyan-900/20 border-cyan-500/30 text-white' : 
+                log.type === 'alert' ? 'bg-red-900/20 border-red-500/30 text-red-100' :
                 'bg-white/5 border-white/10 text-cyan-50 backdrop-blur-md'
               }`}>
-                {/* 視覚情報の描画 */}
                 {log.imageUrl && (
-                  <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 1.2 }} className="mb-12 overflow-hidden rounded-[4rem] border-2 border-white/20 shadow-2xl group relative cursor-zoom-in">
-                    <img src={log.imageUrl} alt="System Observation" className="w-full h-auto transition-transform duration-[3s] group-hover:scale-110" onClick={() => window.open(log.imageUrl)} />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-60 pointer-events-none" />
-                    <div className="absolute bottom-10 left-12 flex items-center gap-6">
-                       <div className="p-4 bg-yellow-500/20 rounded-3xl backdrop-blur-xl border border-yellow-500/40 shadow-2xl shadow-black"><Camera size={32} className="text-yellow-400"/></div>
-                       <div className="flex flex-col">
-                          <span className="text-[14px] font-black text-white uppercase tracking-[0.4em] italic drop-shadow-lg">All_Seeing_Eye_Capture</span>
-                          <span className="text-[11px] text-yellow-600 font-bold uppercase tracking-widest mt-2 opacity-80">Source: Puppeteer_CNS_Agent_Node</span>
-                       </div>
-                    </div>
-                  </motion.div>
+                  <img src={log.imageUrl} alt="Capture" className="w-full h-auto rounded-lg mb-3 border border-white/10" onClick={() => window.open(log.imageUrl)} />
                 )}
-                
-                {log.type === 'gemini' || log.type === 'sys' ? (
-                  <MatrixText text={log.msg} speed={8} />
-                ) : (
-                  log.msg
-                )}
+                {log.type === 'gemini' || log.type === 'sys' ? <MatrixText text={log.msg} speed={5} /> : log.msg}
               </div>
             </motion.div>
           ))}
         </AnimatePresence>
-        {isThinking && (
-          <div className="flex gap-5 p-10">
-            {[0, 0.2, 0.4].map(delay => (
-              <motion.div key={delay} animate={{ scale: [1, 2.5, 1], opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.4, delay }} className="w-4 h-4 bg-cyan-500 rounded-full shadow-[0_0_30px_#00f2ff]" />
-            ))}
-          </div>
-        )}
+        {isThinking && <div className="text-xs text-cyan-500 animate-pulse px-4">PROCESSING_REQUEST...</div>}
         <div ref={chatEndRef} />
       </div>
 
-      {/* 司令入力インターフェース */}
-      <div className="p-12 md:p-20 bg-black/90 backdrop-blur-[100px] border-t border-cyan-900/50 z-50 shadow-[0_-50px_80px_rgba(0,0,0,1)] border-double">
-        <div className="max-w-7xl mx-auto flex items-center gap-12">
-          <motion.button whileTap={{ scale: 0.8 }} onClick={startVoiceCommand} className={`w-24 h-24 md:w-32 md:h-32 rounded-full flex items-center justify-center transition-all shadow-2xl relative group overflow-hidden ${isLive ? 'bg-red-600 shadow-[0_0_60px_#ff0000] ring-8 ring-red-950' : 'bg-cyan-900/20 border-2 border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10'}`}>
-            <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-            <Mic size={56} className={isLive ? 'animate-pulse scale-125' : 'group-hover:scale-125 transition-transform duration-700'} />
+      {/* 司令入力インターフェース（修正：サイズ適正化） */}
+      <div className="p-4 md:p-6 bg-black/90 backdrop-blur-xl border-t border-cyan-900/30 z-50">
+        <div className="max-w-5xl mx-auto flex items-center gap-3 md:gap-6">
+          <motion.button whileTap={{ scale: 0.9 }} onClick={startVoiceCommand} className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center transition-all shadow-lg border ${isLive ? 'bg-red-600 border-red-500 animate-pulse' : 'bg-cyan-900/20 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10'}`}>
+            <Mic size={20} className={isLive ? 'text-white' : ''} />
           </motion.button>
           
           <div className="flex-1 relative">
             <input 
-              className="w-full h-24 md:h-32 bg-white/5 border-2 border-cyan-900/60 rounded-[4.5rem] px-16 pr-40 text-2xl md:text-3xl outline-none focus:border-cyan-400 focus:bg-white/10 transition-all text-white placeholder-cyan-950 shadow-inner font-mono tracking-tighter italic shadow-2xl" 
-              placeholder="要塞アクセスコードまたは司令を入力せよ..." 
+              className="w-full h-12 md:h-14 bg-white/5 border border-cyan-900/40 rounded-full px-6 pr-14 text-sm md:text-base outline-none focus:border-cyan-500/50 focus:bg-white/10 transition-all text-white placeholder-cyan-900/50 font-mono" 
+              placeholder="COMMAND..." 
               value={inputMessage} 
               onChange={(e) => setInputMessage(e.target.value)} 
               onKeyDown={(e) => e.key === 'Enter' && handleCommand()} 
             />
-            <button onClick={() => handleCommand()} className="absolute right-12 top-6 md:top-8 flex items-center justify-center text-cyan-700 hover:text-cyan-400 transition-all hover:scale-150 active:scale-90 transform group"><ChevronRight size={72} className="group-hover:translate-x-4 transition-transform duration-700" /></button>
+            <button onClick={() => handleCommand()} className="absolute right-2 top-2 w-8 h-8 md:w-10 md:h-10 flex items-center justify-center rounded-full text-cyan-600 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all">
+              <ChevronRight size={20} />
+            </button>
           </div>
         </div>
       </div>
@@ -881,12 +855,43 @@ export default function LaruNexusInfinityCore() {
   const HistoryView = () => (
     <div className="flex-1 p-4 md:p-12 overflow-y-auto pb-32 md:pb-12 scrollbar-hide relative">
       <div className="max-w-5xl mx-auto space-y-16 relative z-10">
-        <header className="text-center space-y-6">
-          <div className="inline-block px-6 py-2 border border-cyan-500/40 rounded-full bg-cyan-500/10 text-[12px] text-cyan-300 font-bold uppercase tracking-widest backdrop-blur-md">Strategic Archives</div>
-          <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter uppercase italic drop-shadow-lg leading-none">Roadmap 2026</h1>
-          <p className="text-sm md:text-base text-gray-400 max-w-2xl mx-auto leading-relaxed font-bold tracking-wider">
-            齋藤ホールディングスの未来を決定づけるイニシアチブ。<br/>自律的に無限進化を続けます。
-          </p>
+        {/* ヘッダー（修正版：スマホでの重なり解消） */}
+        <header className="h-16 md:h-20 border-b border-cyan-900/40 bg-black/80 backdrop-blur-md flex items-center justify-between px-4 md:px-8 z-50 relative shrink-0 shadow-lg">
+          {/* ロゴエリア */}
+          <div className="flex items-center gap-3 md:gap-6 group cursor-pointer" onClick={() => { setActiveTab('DASHBOARD'); sfx.play('click'); }}>
+            <Zap className={isConnected ? 'text-cyan-400 drop-shadow-[0_0_10px_#00f2ff]' : 'text-gray-700'} size={24} />
+            <div className="flex flex-col">
+              <span className="font-black tracking-[0.2em] text-lg md:text-2xl text-white uppercase italic">LARU NEXUS</span>
+              <span className="text-[10px] text-cyan-800 font-bold uppercase tracking-widest leading-none hidden md:block">Infinity_Core v8.6</span>
+            </div>
+          </div>
+        
+          {/* 右側コントロール */}
+          <div className="flex items-center gap-4 md:gap-8">
+            {/* PCのみ表示するボタン群 */}
+            <div className="hidden lg:flex items-center gap-4 border-r border-cyan-900/30 pr-6 mr-2">
+               <HeaderBtn icon={<RefreshCw size={20}/>} onClick={handleRefresh} label="REBOOT" />
+               <HeaderBtn icon={<Trash2 size={20}/>} onClick={handleClearLogs} label="CLEAR" color="hover:text-red-500" />
+               <HeaderBtn icon={<Bell size={20}/>} onClick={requestNotification} label="SYNC" />
+            </div>
+
+            {/* ステータス表示（スマホでは文字を隠してシンプルに） */}
+            <div className="flex items-center gap-4 font-mono">
+               <div className="flex flex-col items-end">
+                  <div className={`text-[10px] md:text-xs font-bold tracking-tight flex items-center gap-2 ${isConnected ? 'text-green-500' : 'text-red-500'}`}>
+                    <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-red-500 animate-pulse'}`}/>
+                    {/* スマホでは文字を消す */}
+                    <span className="hidden md:inline">CNS_CONNECTED</span>
+                  </div>
+                  <div className="text-[9px] text-cyan-900 font-bold uppercase tracking-wider mt-1 hidden md:block">MacBook_Air_Saito_01</div>
+               </div>
+             
+               {/* スマホ用マイクボタン（ヘッダー内） */}
+               <button onClick={startVoiceCommand} className="p-2 rounded-lg bg-cyan-900/20 text-cyan-400 border border-cyan-500/20 md:hidden active:bg-cyan-500/30">
+                 <Mic size={20} />
+               </button>
+            </div>
+          </div>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -1175,26 +1180,29 @@ function HeaderBtn({ icon, onClick, label, color = "hover:text-cyan-400" }: { ic
   );
 }
 
-// サイドナビゲーション
+// サイドナビゲーション（修正版：スリム化）
 function SideNav({ activeTab, setActiveTab }: { activeTab: string, setActiveTab: (t: any) => void }) {
   return (
-    <nav className="hidden md:flex w-28 border-r border-cyan-900/40 flex-col items-center py-16 gap-16 bg-black/80 backdrop-blur-[60px] z-40 shrink-0 shadow-[30px_0_60px_rgba(0,0,0,0.9)] border-white/5 border-double">
-      <SideBtn icon={<Terminal size={36}/>} active={activeTab === 'COMMAND'} onClick={() => setActiveTab('COMMAND')} label="指令" />
-      <SideBtn icon={<Activity size={36}/>} active={activeTab === 'DASHBOARD'} onClick={() => setActiveTab('DASHBOARD')} label="監視" />
-      <SideBtn icon={<Layers size={36}/>} active={activeTab === 'KPI'} onClick={() => setActiveTab('KPI')} label="分析" />
-      <SideBtn icon={<History size={36}/>} active={activeTab === 'HISTORY'} onClick={() => setActiveTab('HISTORY')} label="履歴" />
+    // w-28 -> w-20, py-16 -> py-8 に縮小
+    <nav className="hidden md:flex w-20 border-r border-cyan-900/40 flex-col items-center py-8 gap-6 bg-black/80 backdrop-blur-[60px] z-40 shrink-0 shadow-[20px_0_40px_rgba(0,0,0,0.5)] border-white/5 border-double">
+      <SideBtn icon={<Terminal size={24}/>} active={activeTab === 'COMMAND'} onClick={() => setActiveTab('COMMAND')} label="指令" />
+      <SideBtn icon={<Activity size={24}/>} active={activeTab === 'DASHBOARD'} onClick={() => setActiveTab('DASHBOARD')} label="監視" />
+      <SideBtn icon={<Layers size={24}/>} active={activeTab === 'KPI'} onClick={() => setActiveTab('KPI')} label="分析" />
+      <SideBtn icon={<History size={24}/>} active={activeTab === 'HISTORY'} onClick={() => setActiveTab('HISTORY')} label="履歴" />
       <div className="flex-1" />
-      <SideBtn icon={<Settings size={36}/>} active={activeTab === 'SETTINGS'} onClick={() => setActiveTab('SETTINGS')} label="設定" />
+      <SideBtn icon={<Settings size={24}/>} active={activeTab === 'SETTINGS'} onClick={() => setActiveTab('SETTINGS')} label="設定" />
     </nav>
   );
 }
 
+// サイドボタン（修正版：パディング縮小）
 function SideBtn({ icon, active, onClick, label }: { icon: React.ReactNode, active: boolean, onClick: () => void, label: string }) {
   return (
-    <button onClick={() => { sfx.play('click'); onClick(); }} className={`relative p-6 rounded-[2.5rem] transition-all duration-700 group shadow-2xl active:scale-90 ${active ? 'bg-cyan-500/20 text-cyan-400 border-2 border-cyan-500/50 shadow-cyan-500/30 scale-110 rotate-1' : 'text-cyan-950 border border-transparent hover:border-white/10 hover:bg-white/5 hover:text-cyan-600'}`}>
+    // p-6 -> p-4, rounded-[2.5rem] -> rounded-xl, hoverエフェクト調整
+    <button onClick={() => { sfx.play('click'); onClick(); }} className={`relative p-4 rounded-xl transition-all duration-300 group shadow-lg active:scale-90 ${active ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50 shadow-cyan-500/20' : 'text-cyan-900 border border-transparent hover:border-white/10 hover:bg-white/5 hover:text-cyan-600'}`}>
       {icon}
-      <span className="absolute left-full ml-12 px-8 py-4 bg-[#050505] border-2 border-cyan-900/60 text-cyan-200 text-[14px] font-black italic uppercase tracking-[0.5em] rounded-[1.5rem] opacity-0 group-hover:opacity-100 transition-all duration-700 pointer-events-none whitespace-nowrap z-[100] shadow-[0_30px_60px_rgba(0,0,0,1)] border-double">{label}</span>
-      {active && <motion.div layoutId="side-indicator-infinity" className="absolute left-0 top-1/2 -translate-y-1/2 w-2.5 h-16 bg-cyan-400 rounded-r-full shadow-[0_0_30px_#00f2ff]" />}
+      <span className="absolute left-full ml-4 px-3 py-1 bg-[#050505] border border-cyan-900/60 text-cyan-200 text-[10px] font-bold tracking-widest rounded-md opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none whitespace-nowrap z-[100] shadow-xl">{label}</span>
+      {active && <motion.div layoutId="side-indicator-infinity" className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-cyan-400 rounded-r-full shadow-[0_0_15px_#00f2ff]" />}
     </button>
   );
 }
