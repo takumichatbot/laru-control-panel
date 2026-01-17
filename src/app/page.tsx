@@ -495,13 +495,22 @@ export default function LaruNexusInfinityCore() {
   }, [useVoice]); // useVoiceを依存配列に追加
 
   /**
-   * WebSocket接続 & リアルタイム監視
+   * WebSocket接続 & リアルタイム監視 (修正版: 自動URL切り替え)
    */
   useEffect(() => {
     sfx.init();
+    
+    // 接続先URLを自動決定
+    let wsUrl = 'ws://localhost:8000/ws'; // デフォルト(開発用)
+    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+      // 本番環境(Render)の場合、今のURLに合わせて wss:// (セキュア) に切り替え
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsUrl = `${protocol}//${window.location.host}/ws`;
+    }
+
     const connect = () => {
-      // ローカルバックエンド (Python/FastAPI) と接続
-      ws.current = new WebSocket('ws://localhost:8000/ws');
+      console.log(`Connecting to CNS: ${wsUrl}`); // デバッグ用ログ
+      ws.current = new WebSocket(wsUrl);
       
       ws.current.onopen = () => {
         setIsConnected(true);
@@ -511,6 +520,7 @@ export default function LaruNexusInfinityCore() {
 
       ws.current.onclose = () => {
         setIsConnected(false);
+        // 接続切れの場合、3秒後に再接続
         setTimeout(connect, 3000); 
       };
 
@@ -519,6 +529,8 @@ export default function LaruNexusInfinityCore() {
           const message = JSON.parse(event.data);
           if (message.type === 'LOG') {
             addLog(message.payload.msg, message.payload.type, message.payload.imageUrl);
+            // 思考終了
+            setIsThinking(false);
           } else if (message.type === 'KPI_UPDATE') {
             setKpiData(prev => [...prev.slice(-30), message.data]);
           } else if (message.type === 'PROJECT_UPDATE') {
@@ -541,8 +553,6 @@ export default function LaruNexusInfinityCore() {
       if (isLive) setAudioLevel(Math.random() * 80);
     }, 100);
 
-    
-
     return () => {
       ws.current?.close();
       clearInterval(audioMonitor);
@@ -552,16 +562,20 @@ export default function LaruNexusInfinityCore() {
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs, isThinking]);
 
   /**
-   * 司令送信
+   * 司令送信 (修正版: オフラインでも自分の声は表示する)
    */
   const handleCommand = (cmd?: string) => {
     const message = cmd || inputMessage;
-    if (!message.trim() || !isConnected) return;
+    // 修正: !isConnected のチェックをここでは外す
+    if (!message.trim()) return;
 
+    // 1. まず画面に表示 (これで「無視された」感がなくなります)
     addLog(message, 'user');
     setIsThinking(true);
     sfx.play('click');
+    setInputMessage('');
 
+    // 2. 送信トライ
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
       ws.current.send(JSON.stringify({ 
         command: message,
@@ -570,11 +584,12 @@ export default function LaruNexusInfinityCore() {
         timestamp: Date.now()
       }));
     } else {
-      addLog('エラー: 通信リンクがオフラインです。', 'alert');
+      // 3. 繋がっていない場合は、少し遅れてエラーを出す
+      setTimeout(() => {
+        addLog('エラー: 中枢神経(バックエンド)と通信できません。Pythonサーバーは起動していますか？', 'alert');
+        setIsThinking(false);
+      }, 500);
     }
-
-    setInputMessage('');
-    setIsThinking(false);
   };
 
   /**
