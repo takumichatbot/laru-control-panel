@@ -313,6 +313,60 @@ const ProStatus = ({ status }: { status: ProjectData['status'] }) => {
   );
 };
 
+function ProjectCard({ project, onAction, isClient = false }: { project: ProjectData, onAction: () => void, isClient?: boolean }) {
+  // ProStatusが未定義の場合の安全策
+  const StatusComponent = ({ status }: { status: string }) => {
+    const color = status === 'ONLINE' ? 'bg-green-500' : status === 'BUILDING' ? 'bg-yellow-500' : 'bg-red-500';
+    return (
+      <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-full border border-white/5">
+        <div className={`w-1.5 h-1.5 rounded-full ${color} shadow-[0_0_8px_currentColor]`} />
+        <span className="text-[9px] font-black uppercase tracking-widest text-white">{status}</span>
+      </div>
+    );
+  };
+
+  return (
+    <motion.div 
+      layoutId={`proj-fix-${project.id}`} 
+      onClick={onAction} 
+      whileHover={{ y: -8, scale: 1.01 }} 
+      className={`bg-white/5 border ${isClient ? 'border-yellow-950/30 hover:border-yellow-600/50 shadow-yellow-900/5' : 'border-cyan-950/30 hover:border-cyan-600/50 shadow-cyan-900/5'} p-10 rounded-[3.5rem] flex flex-col gap-8 cursor-pointer transition-all duration-1000 group shadow-2xl relative overflow-hidden backdrop-blur-sm border-double active:scale-[0.98]`}
+    >
+      <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
+      <div className="flex justify-between items-start relative z-10">
+        <div className="flex flex-col gap-2">
+          <span className={`text-lg font-black uppercase italic tracking-tighter group-hover:text-white transition-colors duration-500 ${isClient ? 'text-yellow-700' : 'text-cyan-600'}`}>{project.name}</span>
+          <span className="text-[10px] text-gray-700 font-mono tracking-[0.2em] italic uppercase opacity-60 font-black border-l-2 border-cyan-900/40 pl-4 leading-none">{project.repo}</span>
+        </div>
+        <StatusComponent status={project.status} />
+      </div>
+      
+      <div className="space-y-3 relative z-10">
+         <div className="flex justify-between text-[10px] font-black text-gray-700 uppercase tracking-[0.4em] italic">
+           <span>Core_Load</span>
+           <span className={project.load > 80 ? 'text-red-700' : isClient ? 'text-yellow-900' : 'text-cyan-950'}>{project.load}%</span>
+         </div>
+         <div className="w-full h-1.5 bg-gray-950 rounded-full overflow-hidden shadow-inner border border-white/5">
+            <motion.div 
+              initial={{ width: 0 }} 
+              animate={{ width: `${project.load}%` }} 
+              transition={{ duration: 1.5, ease: "easeOut" }} 
+              className={`h-full shadow-lg transition-all duration-1000 ${project.load > 80 ? 'bg-red-600' : isClient ? 'bg-yellow-600' : 'bg-cyan-600'}`} 
+            />
+         </div>
+      </div>
+
+      <div className="flex justify-between items-center pt-6 relative z-10 border-t border-white/5 opacity-40 group-hover:opacity-100 transition-all duration-1000">
+         <div className="flex gap-6">
+            <div className="flex items-center gap-2 text-[10px] text-gray-600 font-black uppercase"><Terminal size={12}/> CLI</div>
+            <div className="flex items-center gap-2 text-[10px] text-gray-600 font-black uppercase"><GitBranch size={12}/> PROD</div>
+         </div>
+         <ChevronRight size={20} className="text-cyan-950 group-hover:text-cyan-400 group-hover:translate-x-3 transition-all duration-500" />
+      </div>
+    </motion.div>
+  );
+}
+
 // --- 5. メインアプリケーションコンポーネント ---
 export default function LaruNexusInfinityCore() {
   // --- A. 状態管理 (Central State) ---
