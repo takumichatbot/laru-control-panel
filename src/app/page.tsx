@@ -367,7 +367,7 @@ export default function LaruNexusInfinityCore() {
     { id: 'rm4', category: 'AI', name: '社長デジタルツイン', desc: '齋藤社長の思考を完全に模倣する経営AI', benefits: '24時間経営代行', status: 'PENDING', progress: 5 },
     { id: 'rm5', category: 'SECURITY', name: '自己焼却プロトコル', desc: '物理奪取時のデータ瞬時抹消', benefits: '機密保持の最終手段', status: 'ACTIVE', progress: 100 },
     { id: 'rm6', category: 'INFRA', name: '衛星緊急バックアップ', desc: 'Starlinkによる地上インフラ迂回', benefits: '災害時の司令権維持', status: 'PENDING', progress: 15 },
-    { id: 'rm7', category: 'AI', name: '感情認識マーケティング', desc: '声色から需要を予測', benefits: '成約率 3x 向上の見込み', status: 'DEVELOPING', progress: 40 },
+    { id: 'rm7', category: 'AI', name: '感情認識マーケティング', desc: '声色から需要を予測', benefits: 'LTV 3x 向上', status: 'DEVELOPING', progress: 40 },
     { id: 'rm8', category: 'INFRA', name: 'マルチクラウド避難', desc: 'AWS/GCPの瞬時切り替え', benefits: '稼働率 100%', status: 'PENDING', progress: 0 },
     { id: 'rm9', category: 'AI', name: '競合サービス自律偵察', desc: '24時間のライバル監視・要約', benefits: '戦略の先手奪取', status: 'ACTIVE', progress: 95 },
     { id: 'rm10', category: 'UX', name: 'ホログラム指令室', desc: 'AR/VR 空間投影 UI', benefits: '物理モニター制約の消失', status: 'PENDING', progress: 0 },
@@ -867,6 +867,11 @@ export default function LaruNexusInfinityCore() {
             </motion.div>
           ))}
         </div>
+        
+        <div className="text-center py-40 opacity-10 group hover:opacity-50 transition-opacity duration-[4s]">
+           <Lock size={160} className="mx-auto text-cyan-900 mb-16 group-hover:rotate-[-10deg] group-hover:scale-125 transition-all duration-[3s] ease-in-out shadow-2xl" />
+           <p className="text-[20px] text-cyan-950 font-black tracking-[1.5em] uppercase italic">Deep_Cryptographic_Layer: Only_President_Saito_Authorized</p>
+        </div>
       </div>
     </div>
   );
@@ -970,7 +975,7 @@ export default function LaruNexusInfinityCore() {
   // --- F. 統合レンダリング・フレームワーク ---
 
   return (
-    <div className="fixed inset-0 bg-[#000000] text-cyan-400 font-mono flex flex-col overflow-hidden selection:bg-cyan-950 selection:text-white">
+    <div className="fixed inset-0 bg-[#000000] text-cyan-400 font-mono flex flex-col overflow-hidden selection:bg-cyan-900 selection:text-white">
       {/* 視覚エフェクトレイヤー */}
       <div className="absolute inset-0 opacity-[0.12] pointer-events-none z-0" style={{ backgroundImage: 'linear-gradient(#00f2ff 1px, transparent 1px), linear-gradient(90deg, #00f2ff 1px, transparent 1px)', backgroundSize: '50px 50px' }} />
       <div className="absolute inset-0 bg-gradient-to-b from-black via-transparent to-black pointer-events-none z-10" />
@@ -1032,7 +1037,7 @@ export default function LaruNexusInfinityCore() {
         <main className="flex-1 flex flex-col relative overflow-hidden bg-black/60 backdrop-blur-[100px] border-l border-white/5 shadow-inner">
           <AnimatePresence mode='wait'>
             {activeTab === 'DASHBOARD' && <DashboardPanel key="dash_view" />}
-            {activeTab === 'COMMAND' && <CommandView key="cmd_view" />}
+            {activeTab === 'COMMAND' && <CommandPanel key="cmd_view" />}
             {activeTab === 'KPI' && <KpiView key="kpi_view" />}
             {activeTab === 'HISTORY' && <HistoryView key="hist_view" />}
             {activeTab === 'SETTINGS' && <SettingsView key="sett_view" />}
@@ -1169,6 +1174,109 @@ function StatBox({ label, value, sub, color = "text-white" }: { label: string, v
        <div className="text-[14px] text-gray-700 font-black uppercase tracking-[0.6em] mb-10 group-hover:text-cyan-800 italic transition-all border-b border-white/5 pb-4 w-fit">// {label}</div>
        <div className={`text-6xl font-black italic tracking-tighter mb-5 ${color} drop-shadow-[0_0_40px_rgba(255,255,255,0.3)] group-hover:scale-105 transition-transform duration-700`}>{value}</div>
        <div className="text-[14px] text-cyan-950 font-black tracking-[0.4em] uppercase italic opacity-40 group-hover:opacity-100 transition-all">{sub}</div>
+    </div>
+  );
+}
+
+// コマンドパレット (モーダル)
+function CommandPalette({ isCommandOpen, setIsCommandOpen, handleCommand, handleRefresh }: { isCommandOpen: boolean, setIsCommandOpen: (v: boolean) => void, handleCommand: (c: string) => void, handleRefresh: () => void }) {
+  return (
+    <AnimatePresence>
+      {isCommandOpen && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/98 backdrop-blur-[150px] z-[100000] p-12 flex flex-col pt-48 items-center overflow-y-auto" onClick={() => setIsCommandOpen(false)}>
+           <motion.div initial={{ scale: 0.8, y: 150 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.8, y: 150 }} transition={{ type: "spring", damping: 30 }} className="w-full max-w-7xl bg-[#080808] border-2 border-cyan-500/60 rounded-[7rem] overflow-hidden shadow-[0_0_300px_rgba(0,242,255,0.3)] flex flex-col backdrop-blur-[200px] border-double relative shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="absolute top-0 left-0 w-full h-3 bg-gradient-to-r from-transparent via-cyan-500/60 to-transparent animate-pulse" />
+              <div className="p-20 md:p-32 border-b-2 border-cyan-900/80 flex items-center gap-16 bg-white/5 shadow-inner relative overflow-hidden">
+                 <Search className="text-cyan-500 animate-pulse scale-[2.5]" size={72} />
+                 <input className="bg-transparent border-none outline-none text-white flex-1 text-5xl md:text-8xl font-black italic tracking-tighter placeholder-cyan-950 uppercase italic font-mono transition-all focus:placeholder-transparent drop-shadow-2xl" placeholder="SYSTEM_COMMAND_INPUT" autoFocus onKeyDown={e => { if(e.key === 'Enter') { handleCommand((e.target as any).value); setIsCommandOpen(false); } }} />
+              </div>
+              <div className="p-20 md:p-32 grid grid-cols-1 md:grid-cols-2 gap-16 bg-gradient-to-b from-transparent to-black/60">
+                 <QuickActionBtn icon={<Cpu size={40}/>} cmd="/deploy larubot" desc="AI中枢 HP 緊急展開シーケンス" onClick={() => handleCommand('/deploy larubot')} />
+                 <QuickActionBtn icon={<Briefcase size={40}/>} cmd="/deploy flastal" desc="外部顧客 Flastal.net 緊急同期" onClick={() => handleCommand('/deploy flastal')} />
+                 <QuickActionBtn icon={<Monitor size={40}/>} cmd="/monitor --deep" desc="全ノードの深層パケット監査" onClick={() => handleCommand('/monitor --deep')} />
+                 <QuickActionBtn icon={<HardDrive size={40}/>} cmd="/reboot nexus" desc="要塞OSの再構築 (Emergency)" onClick={handleRefresh} />
+                 <QuickActionBtn icon={<Shield size={40}/>} cmd="/lockdown --all" desc="全ポートの物理遮断" onClick={() => handleCommand('/lockdown --all')} />
+                 <QuickActionBtn icon={<History size={40}/>} cmd="/logs purge" desc="司令履歴の暗号抹消" onClick={() => handleCommand('/logs purge')} />
+              </div>
+           </motion.div>
+           <button className="mt-24 text-cyan-950 text-xl font-black tracking-[2em] border-2 border-cyan-900/30 px-32 py-10 rounded-full hover:bg-cyan-500/10 active:scale-95 transition-all duration-1000 uppercase hover:text-cyan-500 shadow-[0_0_100px_rgba(0,0,0,1)] italic border-dashed backdrop-blur-3xl" onClick={() => setIsCommandOpen(false)}>EXIT_INTERFACE / ESC</button>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// プロジェクト詳細オーバーレイ
+function ProjectOverlay({ selectedProject, setSelectedProject, handleCommand }: { selectedProject: ProjectData | null, setSelectedProject: (p: null) => void, handleCommand: (c: string) => void }) {
+  if (!selectedProject) return null;
+  return (
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-12 md:p-24 overflow-hidden backdrop-blur-[150px] bg-black/95" onClick={() => setSelectedProject(null)}>
+       <motion.div initial={{ scale: 0.8, opacity: 0, y: 150 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.8, opacity: 0, y: 150 }} transition={{ duration: 1, type: "spring", bounce: 0.2 }} className="w-full max-w-[100rem] bg-[#020202] border-2 border-cyan-500/60 rounded-[8rem] overflow-hidden shadow-[0_0_300px_rgba(0,242,255,0.2)] flex flex-col md:flex-row h-full max-h-[96vh] border-double" onClick={e => e.stopPropagation()}>
+          <div className="w-full md:w-[40%] bg-cyan-950/10 border-r-2 border-cyan-900/40 p-20 flex flex-col relative overflow-hidden">
+             <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at top left, #00f2ff, transparent 80%)' }} />
+             <div className="mb-24 relative z-10">
+                <div className="flex justify-between items-start mb-16">
+                   <ProStatus status={selectedProject.status} />
+                   <button onClick={() => setSelectedProject(null)} className="p-6 hover:bg-white/10 rounded-full text-gray-800 hover:text-white transition-all duration-1000 border-2 border-transparent hover:border-white/20 active:scale-75"><X size={64}/></button>
+                </div>
+                <h2 className="text-6xl md:text-8xl font-black text-white tracking-tighter uppercase italic leading-none drop-shadow-[0_0_60px_rgba(255,255,255,0.4)]">{selectedProject.name}</h2>
+                <p className="text-xl text-cyan-800 font-mono mt-10 uppercase tracking-[0.8em] italic font-black border-l-8 border-cyan-900/80 pl-10 leading-none shadow-2xl">{selectedProject.repo}</p>
+             </div>
+             <div className="flex-1 space-y-16 relative z-10">
+                <ProjectMetric label="Latency_CNS_Sync" value={`${selectedProject.latency} MS`} progress={Math.min(100, selectedProject.latency / 1.1)} />
+                <ProjectMetric label="SLA_Uptime_Integrity" value="99.98%" progress={99.9} color={COLORS.green} />
+                <ProjectMetric label="FATAL_KERNEL_ERRORS" value={selectedProject.stats.errors.toString()} progress={selectedProject.stats.errors * 40} color={selectedProject.stats.errors > 0 ? COLORS.red : COLORS.cyan} />
+             </div>
+             <button onClick={() => { sfx.play('success'); handleCommand(`/deploy ${selectedProject.id}`); setSelectedProject(null); }} className="w-full py-12 mt-20 bg-cyan-500 text-black font-black uppercase text-2xl tracking-[1em] rounded-[4rem] hover:bg-white hover:scale-[1.05] active:scale-95 transition-all duration-1000 shadow-[0_0_100px_#00f2ff] italic border-none relative z-10 overflow-hidden group/deploy">
+                <span className="relative z-10 group-hover/deploy:tracking-[1.2em] transition-all">CNS_DEPLOY_EXECUTE</span>
+                <div className="absolute inset-0 bg-white opacity-0 group-hover/deploy:opacity-30 transition-opacity" />
+             </button>
+          </div>
+          <div className="flex-1 p-20 md:p-32 overflow-y-auto space-y-24 scrollbar-hide bg-gradient-to-br from-black to-[#050505]">
+             <section className="relative z-10">
+                <div className="flex items-center justify-between mb-16 border-b-4 border-white/10 pb-10 shadow-2xl">
+                   <h3 className="text-3xl font-black text-gray-600 uppercase tracking-[1em] flex items-center gap-10 italic italic group cursor-default"><Terminal size={48} className="group-hover:scale-150 transition-transform duration-[1s]" /> OS_Internal_Live_Logs</h3>
+                   <div className="text-xl text-cyan-900 font-mono font-black animate-pulse uppercase tracking-[0.8em] bg-cyan-900/10 px-10 py-3 rounded-full border-2 border-cyan-900/40 shadow-inner italic">CNS_ACTIVE</div>
+                </div>
+                <div className="bg-black border-2 border-white/10 rounded-[5rem] p-20 font-mono text-[18px] space-y-8 shadow-[0_0_150px_rgba(0,0,0,1)] relative group overflow-hidden border-double backdrop-blur-3xl">
+                   <p className="text-green-950 tracking-tighter transition-colors hover:text-green-400 duration-[1s]">[{new Date().toLocaleTimeString()}] INFRA: Socket tunnel established on CNS_Secure_Port_443</p>
+                   <p className="text-cyan-950 tracking-tighter transition-colors hover:text-cyan-400 duration-[1s]">[{new Date().toLocaleTimeString()}] CORE: Handshake with Quantum_DB_Cluster [Tokyo_Region] SUCCESS</p>
+                   <p className="text-gray-800 tracking-tighter transition-colors hover:text-gray-400 duration-[1s]">[{new Date().toLocaleTimeString()}] SECURE: Traffic re-routing via AES-256-GCM quantum resistance layer.</p>
+                   {selectedProject.stats.errors > 0 && <p className="text-red-950 animate-pulse tracking-tighter font-black uppercase text-red-600 bg-red-900/30 px-12 py-6 rounded-[3rem] border-2 border-red-900/60 shadow-[0_0_80px_rgba(255,0,0,0.4)]">[{new Date().toLocaleTimeString()}] CRITICAL_HALT: Unauthorized access attempt blocked by Nexus_Sentinel</p>}
+                </div>
+             </section>
+          </div>
+       </motion.div>
+    </div>
+  );
+}
+
+function ProjectMetric({ label, value, progress, color = COLORS.cyan }: { label: string, value: string, progress: number, color?: string }) {
+  return (
+    <div className="space-y-8 group cursor-default">
+       <div className="flex justify-between items-end px-6 group-hover:translate-x-2 transition-transform duration-700">
+          <span className="text-[15px] font-black text-gray-700 uppercase tracking-[0.5em] italic group-hover:text-cyan-800 transition-colors">{label}</span>
+          <span className="text-2xl font-black text-white italic tracking-tighter drop-shadow-2xl">{value}</span>
+       </div>
+       <div className="h-5 bg-gray-950 rounded-full overflow-hidden shadow-inner border-2 border-white/5 scale-y-110 relative group-hover:border-cyan-900/30 transition-colors">
+          <motion.div initial={{ width: 0 }} animate={{ width: `${progress}%` }} transition={{ duration: 3, type: "spring", bounce: 0.2 }} className="h-full shadow-[0_0_50px_currentColor] relative" style={{ backgroundColor: color, color: color }}>
+             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
+          </motion.div>
+       </div>
+    </div>
+  );
+}
+
+function MiniProgress({ label, value, progress, color = COLORS.cyan }: { label: string, value: string, progress: number, color?: string }) {
+  return (
+    <div className="space-y-4">
+       <div className="flex justify-between items-end px-2">
+          <span className="text-[11px] font-black text-gray-700 uppercase tracking-[0.3em] italic">{label}</span>
+          <span className="text-base font-black text-white italic tracking-tighter">{value}</span>
+       </div>
+       <div className="h-2 bg-gray-950 rounded-full overflow-hidden shadow-inner border border-white/5">
+          <motion.div initial={{ width: 0 }} animate={{ width: `${progress}%` }} transition={{ duration: 2.5, ease: "circOut" }} className="h-full shadow-[0_0_20px_currentColor]" style={{ backgroundColor: color }} />
+       </div>
     </div>
   );
 }
