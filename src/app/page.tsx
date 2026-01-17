@@ -266,28 +266,31 @@ interface ChartDataInput {
 // --- 4. 共通UIコンポーネント (Atomic Design) ---
 
 /**
- * 視覚演出: マトリックス・テキスト・デコーダー
+ * 視覚演出: タイプライター・テキスト (修正版: ランダム文字廃止)
+ * 文字が左から右へ普通に流れるように表示されます。
  */
-const MatrixText = ({ text, speed = 10, onComplete }: { text: string, speed?: number, onComplete?: () => void }) => {
+const TypewriterText = ({ text, speed = 20, onComplete }: { text: string, speed?: number, onComplete?: () => void }) => {
   const [display, setDisplay] = useState('');
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789アイウエオカキクケコ";
 
   useEffect(() => {
     let i = 0;
+    setDisplay(''); // リセット
     const interval = setInterval(() => {
-      if (Math.random() > 0.85) sfx.play('typing');
-      setDisplay(text.substring(0, i) + chars[Math.floor(Math.random() * chars.length)]);
+      // 3文字に1回タイピング音
+      if (i % 3 === 0) sfx.play('typing');
+      
+      setDisplay((prev) => text.substring(0, i + 1));
       i++;
-      if (i > text.length) {
+      
+      if (i >= text.length) {
         clearInterval(interval);
-        setDisplay(text);
         if (onComplete) onComplete();
       }
     }, speed);
     return () => clearInterval(interval);
   }, [text, speed, onComplete]);
 
-  return <span className="font-mono tracking-tighter break-words">{display}</span>;
+  return <span className="font-mono leading-relaxed whitespace-pre-wrap">{display}</span>;
 };
 
 /**
@@ -562,48 +565,72 @@ export default function LaruNexusInfinityCore() {
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs, isThinking]);
 
   /**
-   * 司令送信 (修正版: スタンドアローン稼働モード)
-   * サーバー未接続時は、ブラウザ内で演算して応答します。
+   * 司令送信 (修正版: スマート・スタンドアローン応答)
+   * サーバー未接続時でも、入力内容に応じて賢く応答を生成します。
    */
   const handleCommand = (cmd?: string) => {
     const message = cmd || inputMessage;
     if (!message.trim()) return;
 
-    // 1. ユーザーの入力を即座に反映
+    // ユーザー入力を表示
     addLog(message, 'user');
     setIsThinking(true);
     sfx.play('click');
     setInputMessage('');
 
-    // 2. サーバー接続確認
+    // サーバーがあれば送信、なければローカル脳で処理
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-      // サーバーがある場合は送信
-      ws.current.send(JSON.stringify({ 
-        command: message,
-        persona: aiPersona,
-        security_level: securityLevel,
-        timestamp: Date.now()
-      }));
+      ws.current.send(JSON.stringify({ command: message, persona: aiPersona, security_level: securityLevel, timestamp: Date.now() }));
     } else {
-      // 3. 【重要】サーバーがない場合の「スタンドアローン処理」
-      // エラーを出さず、入力に対して擬似的に応答を作成して返す
+      // --- ローカルAI応答ロジック (疑似脳) ---
       setTimeout(() => {
         let response = "";
+        const m = message.toLowerCase(); // 小文字化して判定しやすくする
+
+        // 1. 挨拶・人格系
+        if (m.includes("おはよう") || m.includes("こんにちは")) {
+           response = "おはようございます、齋藤社長。本日の全システム、正常に稼働しています。";
+        } else if (m.includes("誰") || m.includes("自己紹介")) {
+           response = "私はNEXUS Infinity Core v8.6。齋藤ホールディングスの中枢を司るAI司令官です。";
+        } else if (m.includes("疲れた")) {
+           response = "お疲れ様です。少し休息を取られてはいかがでしょうか。要塞の防衛は私にお任せください。";
+        } 
         
-        // 簡易的な応答ロジック
-        if (message.includes("deploy") || message.includes("デプロイ")) {
-           response = `コマンド受理: 対象プロジェクトへのデプロイシーケンスを開始します。現在の進行度: 0%...`;
-        } else if (message.includes("status") || message.includes("ステータス")) {
-           response = `システム全域: 正常稼働中 (GREEN)。CPU負荷: ${Math.floor(Math.random() * 30 + 10)}%`;
-        } else if (message.includes("reboot") || message.includes("再起動")) {
-           response = "緊急再起動プロセスを待機中... 承認待ちです。";
-        } else {
-           response = `受信しました: "${message}"。解析中... データベース照合完了。実行フェーズへ移行します。`;
+        // 2. 指令・アクション系
+        else if (m.includes("deploy") || m.includes("デプロイ") || m.includes("更新")) {
+           response = "了解。対象クラスターへのデプロイシーケンスを開始します。CI/CDパイプライン... 正常。実行中。";
+        } else if (m.includes("reboot") || m.includes("再起動")) {
+           response = "警告: 全システムの再起動には管理者権限が必要です。実行しますか？ (シミュレーション)";
+        } else if (m.includes("stop") || m.includes("停止") || m.includes("削除")) {
+           response = "危険: その操作はビジネスに深刻な影響を与える可能性があります。中止しました。";
         }
 
-        addLog(response, 'gemini'); // AIとして発言
+        // 3. 監視・データ系
+        else if (m.includes("status") || m.includes("ステータス") || m.includes("調子")) {
+           const load = Math.floor(Math.random() * 30 + 10);
+           response = `全システム正常 (ALL GREEN)。\n現在のCPU負荷: ${load}%\nメモリ使用率: 42%\n異常なパケットは検知されていません。`;
+        } else if (m.includes("売上") || m.includes("収益") || m.includes("利益")) {
+           response = "現在の予測収益データ:\n本日の収益: ¥420,000 (+12%)\n今月の着地見込: ¥12,500,000\n非常に順調な推移です。";
+        } else if (m.includes("エラー") || m.includes("バグ")) {
+           response = "エラーログをスキャン中... 直近24時間でクリティカルな障害は発生していません。軽微な警告が3件あります。";
+        } else if (m.includes("flastal")) {
+           response = "クライアント案件 [Flastal] のステータス:\n稼働: オンライン\n応答速度: 88ms\n特に異常は見当たりません。";
+        }
+
+        // 4. フォールバック (該当なし)
+        else {
+           const defaults = [
+             `了解しました。「${message}」に関する処理を実行します。`,
+             "その件につきまして、関連データを検索しました。特に問題は確認されませんでした。",
+             "承知いたしました。タスクキューに追加します。",
+             "申し訳ありません。その指令の意図を完全に解釈できませんでしたが、安全のため監視を強化します。"
+           ];
+           response = defaults[Math.floor(Math.random() * defaults.length)];
+        }
+
+        addLog(response, 'gemini');
         setIsThinking(false);
-      }, 800); // 0.8秒の思考ラグ
+      }, 1000); // 1秒考えてから返す
     }
   };
 
@@ -774,7 +801,7 @@ export default function LaruNexusInfinityCore() {
                   <img src={log.imageUrl} alt="Capture" className="w-full h-auto rounded-lg mb-3 border border-white/10" onClick={() => window.open(log.imageUrl)} />
                 )}
                 {log.type === 'gemini' ? (
-                  <MatrixText text={log.msg} speed={5} />
+                  <TypewriterText text={log.msg} speed={15} />
                 ) : (
                   log.msg
                 )}
@@ -1357,41 +1384,54 @@ function CommandPalette({ isCommandOpen, setIsCommandOpen, handleCommand, handle
 function ProjectOverlay({ selectedProject, setSelectedProject, handleCommand }: { selectedProject: ProjectData | null, setSelectedProject: (p: null) => void, handleCommand: (c: string) => void }) {
   if (!selectedProject) return null;
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-12 md:p-24 overflow-hidden backdrop-blur-[150px] bg-black/95" onClick={() => setSelectedProject(null)}>
-       <motion.div initial={{ scale: 0.8, opacity: 0, y: 150 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.8, opacity: 0, y: 150 }} transition={{ duration: 1, type: "spring", bounce: 0.2 }} className="w-full max-w-[100rem] bg-[#020202] border-2 border-cyan-500/60 rounded-[8rem] overflow-hidden shadow-[0_0_300px_rgba(0,242,255,0.2)] flex flex-col md:flex-row h-full max-h-[96vh] border-double" onClick={e => e.stopPropagation()}>
-          <div className="w-full md:w-[40%] bg-cyan-950/10 border-r-2 border-cyan-900/40 p-20 flex flex-col relative overflow-hidden">
-             <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at top left, #00f2ff, transparent 80%)' }} />
-             <div className="mb-24 relative z-10">
-                <div className="flex justify-between items-start mb-16">
+    <div className="fixed inset-0 z-[10000] flex items-end md:items-center justify-center p-0 md:p-6 backdrop-blur-md bg-black/60" onClick={() => setSelectedProject(null)}>
+       {/* モーダル本体: スマホでは下からせり出すシート、PCでは中央ポップアップ */}
+       <motion.div 
+         initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 25, stiffness: 300 }}
+         className="w-full md:max-w-5xl bg-[#080808] border border-cyan-500/30 md:rounded-3xl rounded-t-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row h-[85vh] md:h-[70vh] relative" 
+         onClick={e => e.stopPropagation()}
+       >
+          {/* 閉じるボタン (スマホ用に押しやすく配置) */}
+          <button onClick={() => setSelectedProject(null)} className="absolute top-4 right-4 z-50 p-2 bg-gray-900/50 rounded-full text-gray-400 hover:text-white border border-white/10">
+            <X size={20}/>
+          </button>
+
+          {/* 左側：ステータス概要 */}
+          <div className="w-full md:w-[40%] bg-cyan-950/5 border-b md:border-b-0 md:border-r border-cyan-900/30 p-6 md:p-10 flex flex-col relative">
+             <div className="mb-8 relative z-10">
+                <div className="mb-4">
                    <ProStatus status={selectedProject.status} />
-                   <button onClick={() => setSelectedProject(null)} className="p-6 hover:bg-white/10 rounded-full text-gray-800 hover:text-white transition-all duration-1000 border-2 border-transparent hover:border-white/20 active:scale-75"><X size={64}/></button>
                 </div>
-                <h2 className="text-6xl md:text-8xl font-black text-white tracking-tighter uppercase italic leading-none drop-shadow-[0_0_60px_rgba(255,255,255,0.4)]">{selectedProject.name}</h2>
-                <p className="text-xl text-cyan-800 font-mono mt-10 uppercase tracking-[0.8em] italic font-black border-l-8 border-cyan-900/80 pl-10 leading-none shadow-2xl">{selectedProject.repo}</p>
+                <h2 className="text-3xl md:text-4xl font-black text-white tracking-tighter uppercase italic leading-none mb-2">{selectedProject.name}</h2>
+                <p className="text-xs text-cyan-700 font-mono uppercase tracking-widest">{selectedProject.repo}</p>
              </div>
-             <div className="flex-1 space-y-16 relative z-10">
-                <ProjectMetric label="Latency_CNS_Sync" value={`${selectedProject.latency} MS`} progress={Math.min(100, selectedProject.latency / 1.1)} />
-                <ProjectMetric label="SLA_Uptime_Integrity" value="99.98%" progress={99.9} color={COLORS.green} />
-                <ProjectMetric label="FATAL_KERNEL_ERRORS" value={selectedProject.stats.errors.toString()} progress={selectedProject.stats.errors * 40} color={selectedProject.stats.errors > 0 ? COLORS.red : COLORS.cyan} />
+             
+             <div className="flex-1 space-y-6 relative z-10 overflow-y-auto scrollbar-hide">
+                <ProjectMetric label="Latency" value={`${selectedProject.latency} ms`} progress={Math.min(100, selectedProject.latency / 1.1)} />
+                <ProjectMetric label="Uptime" value="99.98%" progress={99.9} color={COLORS.green} />
+                <ProjectMetric label="Errors" value={selectedProject.stats.errors.toString()} progress={selectedProject.stats.errors * 20} color={selectedProject.stats.errors > 0 ? COLORS.red : COLORS.cyan} />
              </div>
-             <button onClick={() => { sfx.play('success'); handleCommand(`/deploy ${selectedProject.id}`); setSelectedProject(null); }} className="w-full py-12 mt-20 bg-cyan-500 text-black font-black uppercase text-2xl tracking-[1em] rounded-[4rem] hover:bg-white hover:scale-[1.05] active:scale-95 transition-all duration-1000 shadow-[0_0_100px_#00f2ff] italic border-none relative z-10 overflow-hidden group/deploy">
-                <span className="relative z-10 group-hover/deploy:tracking-[1.2em] transition-all">CNS_DEPLOY_EXECUTE</span>
-                <div className="absolute inset-0 bg-white opacity-0 group-hover/deploy:opacity-30 transition-opacity" />
+
+             <button onClick={() => { sfx.play('success'); handleCommand(`/deploy ${selectedProject.id}`); setSelectedProject(null); }} className="w-full py-4 mt-6 bg-cyan-600 text-white font-bold uppercase tracking-widest rounded-xl hover:bg-cyan-500 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-3">
+                <Rocket size={18} /> DEPLOY EXECUTE
              </button>
           </div>
-          <div className="flex-1 p-20 md:p-32 overflow-y-auto space-y-24 scrollbar-hide bg-gradient-to-br from-black to-[#050505]">
-             <section className="relative z-10">
-                <div className="flex items-center justify-between mb-16 border-b-4 border-white/10 pb-10 shadow-2xl">
-                   <h3 className="text-3xl font-black text-gray-600 uppercase tracking-[1em] flex items-center gap-10 italic italic group cursor-default"><Terminal size={48} className="group-hover:scale-150 transition-transform duration-[1s]" /> OS_Internal_Live_Logs</h3>
-                   <div className="text-xl text-cyan-900 font-mono font-black animate-pulse uppercase tracking-[0.8em] bg-cyan-900/10 px-10 py-3 rounded-full border-2 border-cyan-900/40 shadow-inner italic">CNS_ACTIVE</div>
-                </div>
-                <div className="bg-black border-2 border-white/10 rounded-[5rem] p-20 font-mono text-[18px] space-y-8 shadow-[0_0_150px_rgba(0,0,0,1)] relative group overflow-hidden border-double backdrop-blur-3xl">
-                   <p className="text-green-950 tracking-tighter transition-colors hover:text-green-400 duration-[1s]">[{new Date().toLocaleTimeString()}] INFRA: Socket tunnel established on CNS_Secure_Port_443</p>
-                   <p className="text-cyan-950 tracking-tighter transition-colors hover:text-cyan-400 duration-[1s]">[{new Date().toLocaleTimeString()}] CORE: Handshake with Quantum_DB_Cluster [Tokyo_Region] SUCCESS</p>
-                   <p className="text-gray-800 tracking-tighter transition-colors hover:text-gray-400 duration-[1s]">[{new Date().toLocaleTimeString()}] SECURE: Traffic re-routing via AES-256-GCM quantum resistance layer.</p>
-                   {selectedProject.stats.errors > 0 && <p className="text-red-950 animate-pulse tracking-tighter font-black uppercase text-red-600 bg-red-900/30 px-12 py-6 rounded-[3rem] border-2 border-red-900/60 shadow-[0_0_80px_rgba(255,0,0,0.4)]">[{new Date().toLocaleTimeString()}] CRITICAL_HALT: Unauthorized access attempt blocked by Nexus_Sentinel</p>}
-                </div>
-             </section>
+
+          {/* 右側：ログ・詳細 */}
+          <div className="flex-1 p-6 md:p-10 overflow-y-auto bg-black/40">
+             <div className="flex items-center justify-between mb-6 pb-4 border-b border-white/5">
+                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest flex items-center gap-3"><Terminal size={16} /> Live Logs</h3>
+                <span className="text-[10px] text-green-500 font-mono border border-green-900/30 bg-green-900/10 px-2 py-1 rounded">STREAMING</span>
+             </div>
+             <div className="font-mono text-xs md:text-sm space-y-4 text-gray-400">
+                <p className="text-green-400">[{new Date().toLocaleTimeString()}] Connection established on port 443.</p>
+                <p>[{new Date().toLocaleTimeString()}] Verifying SSL/TLS handshake certificates...</p>
+                <p>[{new Date().toLocaleTimeString()}] Cluster node [ap-northeast-1a] joined pool.</p>
+                <p className="text-cyan-600">[{new Date().toLocaleTimeString()}] Workload distribution optimal.</p>
+                {selectedProject.stats.errors > 0 && (
+                  <p className="text-red-500 font-bold">[{new Date().toLocaleTimeString()}] WARNING: Latency spike detected in ingestion-node-04.</p>
+                )}
+             </div>
           </div>
        </motion.div>
     </div>
