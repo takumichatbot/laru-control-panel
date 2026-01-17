@@ -33,7 +33,7 @@ import {
   AreaChart, Area, PieChart, Pie, Cell, CartesianGrid
 } from 'recharts';
 import { 
-  Terminal, Activity, Shield, Cpu, Mic, Search, AlertCircle, 
+  Terminal, Activity, Monitor, Shield, Cpu, Mic, Search, AlertCircle, 
   CheckCircle, Command, Wifi, Layers, GitBranch, Lock, ChevronRight, 
   Zap, Bell, History, Briefcase, Building2, RefreshCw, Trash2, 
   Camera, Settings, HardDrive, Database, Globe, 
