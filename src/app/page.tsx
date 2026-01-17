@@ -235,6 +235,7 @@ interface ProjectData {
     msg: string; 
     type: 'sys' | 'err' | 'out' 
   }[];
+  [key: string]: any;
 }
 
 interface LogEntry { 
