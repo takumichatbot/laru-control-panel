@@ -313,6 +313,18 @@ const ProStatus = ({ status }: { status: ProjectData['status'] }) => {
   );
 };
 
+/**
+ * 司令部HUD用メトリクス表示 (Build Error Fix)
+ */
+function Metric({ label, value, color = "text-cyan-900" }: { label: string, value: string, color?: string }) {
+  return (
+    <div className="flex flex-col items-end group cursor-default">
+       <span className="text-[11px] text-gray-700 font-black tracking-[0.4em] mb-2 uppercase italic opacity-60 group-hover:text-cyan-800 transition-colors tracking-widest">{label}</span>
+       <span className={`text-[18px] font-black ${color} tracking-tighter italic leading-none shadow-black drop-shadow-lg`}>{value}</span>
+    </div>
+  );
+}
+
 function ProjectCard({ project, onAction, isClient = false }: { project: ProjectData, onAction: () => void, isClient?: boolean }) {
   // ProStatusが未定義の場合の安全策
   const StatusComponent = ({ status }: { status: string }) => {
