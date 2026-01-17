@@ -49,9 +49,9 @@ const COLORS = {
   green: '#39ff14',
   yellow: '#ffea00',
   red: '#ff0040',
-  bg: '#020202',
-  card: 'rgba(255, 255, 255, 0.02)',
-  border: 'rgba(0, 242, 255, 0.2)'
+  bg: '#050505', // 少し明るく
+  card: 'rgba(255, 255, 255, 0.08)', // 0.02 -> 0.08 に変更して視認性アップ
+  border: 'rgba(0, 242, 255, 0.4)'   // 0.2 -> 0.4 に変更して枠線をはっきりさせる
 };
 
 // --- 2. 高度音響合成エンジン (OmegaSoundEngine v7.0 - Strict Null Safe) ---
@@ -331,9 +331,9 @@ function ProjectCard({ project, onAction, isClient = false }: { project: Project
   const StatusComponent = ({ status }: { status: string }) => {
     const color = status === 'ONLINE' ? 'bg-green-500' : status === 'BUILDING' ? 'bg-yellow-500' : 'bg-red-500';
     return (
-      <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-full border border-white/5">
+      <div className="flex items-center gap-2 bg-black/40 px-2 py-1 rounded-full border border-white/10">
         <div className={`w-1.5 h-1.5 rounded-full ${color} shadow-[0_0_8px_currentColor]`} />
-        <span className="text-[9px] font-black uppercase tracking-widest text-white">{status}</span>
+        <span className="text-[10px] font-bold uppercase tracking-wider text-white">{status}</span>
       </div>
     );
   };
@@ -342,39 +342,40 @@ function ProjectCard({ project, onAction, isClient = false }: { project: Project
     <motion.div 
       layoutId={`proj-fix-${project.id}`} 
       onClick={onAction} 
-      whileHover={{ y: -8, scale: 1.01 }} 
-      className={`bg-white/5 border ${isClient ? 'border-yellow-950/30 hover:border-yellow-600/50 shadow-yellow-900/5' : 'border-cyan-950/30 hover:border-cyan-600/50 shadow-cyan-900/5'} p-10 rounded-[3.5rem] flex flex-col gap-8 cursor-pointer transition-all duration-1000 group shadow-2xl relative overflow-hidden backdrop-blur-sm border-double active:scale-[0.98]`}
+      whileHover={{ y: -4, scale: 1.01 }} 
+      // 修正: p-10 -> p-5, rounded-[3.5rem] -> rounded-2xl, gap-8 -> gap-4
+      className={`bg-white/5 border ${isClient ? 'border-yellow-950/50 hover:border-yellow-500/50' : 'border-cyan-950/50 hover:border-cyan-500/50'} p-5 rounded-2xl flex flex-col gap-4 cursor-pointer transition-all duration-300 group shadow-lg relative overflow-hidden backdrop-blur-sm border active:scale-[0.98]`}
     >
-      <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
+      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
       <div className="flex justify-between items-start relative z-10">
-        <div className="flex flex-col gap-2">
-          <span className={`text-lg font-black uppercase italic tracking-tighter group-hover:text-white transition-colors duration-500 ${isClient ? 'text-yellow-700' : 'text-cyan-600'}`}>{project.name}</span>
-          <span className="text-[10px] text-gray-700 font-mono tracking-[0.2em] italic uppercase opacity-60 font-black border-l-2 border-cyan-900/40 pl-4 leading-none">{project.repo}</span>
+        <div className="flex flex-col gap-1">
+          <span className={`text-sm md:text-base font-bold uppercase tracking-tight group-hover:text-white transition-colors duration-300 ${isClient ? 'text-yellow-500' : 'text-cyan-500'}`}>{project.name}</span>
+          <span className="text-[10px] text-gray-400 font-mono tracking-wider uppercase opacity-80 border-l-2 border-cyan-900/40 pl-2">{project.repo}</span>
         </div>
         <StatusComponent status={project.status} />
       </div>
       
-      <div className="space-y-3 relative z-10">
-         <div className="flex justify-between text-[10px] font-black text-gray-700 uppercase tracking-[0.4em] italic">
+      <div className="space-y-2 relative z-10">
+         <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-wider">
            <span>Core_Load</span>
-           <span className={project.load > 80 ? 'text-red-700' : isClient ? 'text-yellow-900' : 'text-cyan-950'}>{project.load}%</span>
+           <span className={project.load > 80 ? 'text-red-400' : isClient ? 'text-yellow-500' : 'text-cyan-400'}>{project.load}%</span>
          </div>
-         <div className="w-full h-1.5 bg-gray-950 rounded-full overflow-hidden shadow-inner border border-white/5">
+         <div className="w-full h-1 bg-gray-800 rounded-full overflow-hidden border border-white/10">
             <motion.div 
               initial={{ width: 0 }} 
               animate={{ width: `${project.load}%` }} 
               transition={{ duration: 1.5, ease: "easeOut" }} 
-              className={`h-full shadow-lg transition-all duration-1000 ${project.load > 80 ? 'bg-red-600' : isClient ? 'bg-yellow-600' : 'bg-cyan-600'}`} 
+              className={`h-full shadow-lg ${project.load > 80 ? 'bg-red-500' : isClient ? 'bg-yellow-500' : 'bg-cyan-500'}`} 
             />
          </div>
       </div>
 
-      <div className="flex justify-between items-center pt-6 relative z-10 border-t border-white/5 opacity-40 group-hover:opacity-100 transition-all duration-1000">
-         <div className="flex gap-6">
-            <div className="flex items-center gap-2 text-[10px] text-gray-600 font-black uppercase"><Terminal size={12}/> CLI</div>
-            <div className="flex items-center gap-2 text-[10px] text-gray-600 font-black uppercase"><GitBranch size={12}/> PROD</div>
+      <div className="flex justify-between items-center pt-3 relative z-10 border-t border-white/10 opacity-60 group-hover:opacity-100 transition-all duration-300">
+         <div className="flex gap-4">
+            <div className="flex items-center gap-1.5 text-[10px] text-gray-400 font-bold uppercase"><Terminal size={10}/> CLI</div>
+            <div className="flex items-center gap-1.5 text-[10px] text-gray-400 font-bold uppercase"><GitBranch size={10}/> PROD</div>
          </div>
-         <ChevronRight size={20} className="text-cyan-950 group-hover:text-cyan-400 group-hover:translate-x-3 transition-all duration-500" />
+         <ChevronRight size={16} className="text-cyan-800 group-hover:text-cyan-400 transition-colors" />
       </div>
     </motion.div>
   );
@@ -626,28 +627,29 @@ export default function LaruNexusInfinityCore() {
 
   /**
    * 監視パネル (DashboardView)
+   * 修正: 余白の縮小、グリッドレイアウトの最適化、文字サイズの適正化
    */
   const DashboardView = () => (
-    <div className="flex-1 p-6 md:p-12 space-y-10 overflow-y-auto pb-24 md:pb-12 scrollbar-hide">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-6">
+    <div className="flex-1 p-4 md:p-8 space-y-6 overflow-y-auto pb-32 md:pb-12 scrollbar-hide">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
         <div>
-          <h2 className="text-sm font-black text-white tracking-[0.6em] uppercase border-l-4 border-cyan-500 pl-5 mb-2 italic shadow-2xl">監視グリッド</h2>
-          <p className="text-[10px] text-cyan-950 font-black tracking-widest ml-4 uppercase opacity-60 italic">Saito Holdings Integrated Network Environment</p>
+          <h2 className="text-sm font-bold text-white tracking-[0.2em] uppercase border-l-4 border-cyan-500 pl-3 mb-1">監視グリッド</h2>
+          <p className="text-[10px] text-gray-400 font-mono tracking-wider ml-3">Saito Holdings Integrated Network Environment</p>
         </div>
-        <div className="flex items-center gap-6 text-[10px] font-black text-cyan-800 bg-cyan-900/10 px-8 py-3 rounded-[3rem] border border-cyan-900/30 backdrop-blur-3xl shadow-inner">
-           <div className="flex items-center gap-2"><Wifi size={14}/> LINK: {isConnected ? <span className="text-green-500 shadow-[0_0_10px_#22c55e]">SECURE</span> : <span className="text-red-600 animate-pulse">OFFLINE</span>}</div>
-           <div className="w-px h-5 bg-cyan-900/40" />
-           <div className="flex items-center gap-2"><CpuIcon size={14}/> NODES: {projects.length} ACTIVE</div>
+        <div className="flex items-center gap-4 text-[10px] font-bold text-cyan-500 bg-cyan-950/30 px-4 py-2 rounded-full border border-cyan-500/20 backdrop-blur-md">
+           <div className="flex items-center gap-2"><Wifi size={12}/> {isConnected ? <span className="text-green-400">ONLINE</span> : <span className="text-red-500 animate-pulse">OFFLINE</span>}</div>
+           <div className="w-px h-3 bg-cyan-500/30" />
+           <div className="flex items-center gap-2"><CpuIcon size={12}/> NODES: {projects.length}</div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* 自社資産 */}
-        <section className="space-y-6">
-          <div className="flex items-center gap-3 text-[11px] text-cyan-600 font-black uppercase tracking-[0.4em] px-3 italic">
-            <Building2 size={16}/> Saito_Corp_Assets
+        <section className="space-y-3">
+          <div className="flex items-center gap-2 text-[11px] text-cyan-400 font-bold uppercase tracking-widest px-1">
+            <Building2 size={14}/> Saito_Corp_Assets
           </div>
-          <div className="grid gap-4">
+          <div className="grid gap-3">
             {projects.filter(p => p.category === 'COMPANY').map((p: ProjectData) => (
               <ProjectCard key={p.id} project={p} onAction={() => setSelectedProject(p)} />
             ))}
@@ -655,11 +657,11 @@ export default function LaruNexusInfinityCore() {
         </section>
 
         {/* 受託案件 */}
-        <section className="space-y-6">
-          <div className="flex items-center gap-3 text-[11px] text-yellow-600 font-black uppercase tracking-[0.4em] px-3 italic">
-            <Briefcase size={16}/> Client_Contracts
+        <section className="space-y-3">
+          <div className="flex items-center gap-2 text-[11px] text-yellow-500 font-bold uppercase tracking-widest px-1">
+            <Briefcase size={14}/> Client_Contracts
           </div>
-          <div className="grid gap-4">
+          <div className="grid gap-3">
             {projects.filter(p => p.category === 'CLIENT').map((p: ProjectData) => (
               <ProjectCard key={p.id} project={p} onAction={() => setSelectedProject(p)} isClient />
             ))}
@@ -668,16 +670,15 @@ export default function LaruNexusInfinityCore() {
       </div>
 
       {/* 統合インフラ・マトリックス */}
-      <div className="border border-cyan-900/20 bg-cyan-950/5 rounded-[4rem] p-12 shadow-[0_0_100px_rgba(0,0,0,1)] relative overflow-hidden group">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/5 rounded-full blur-[150px] pointer-events-none group-hover:scale-150 transition-transform duration-[3s]" />
-        <h3 className="text-xs font-black text-cyan-500 tracking-[0.8em] flex items-center gap-6 mb-20 uppercase italic underline underline-offset-[16px] decoration-cyan-900">
-          <HardDrive size={24}/> Neural Hardware Matrix
+      <div className="border border-cyan-500/20 bg-cyan-950/10 rounded-2xl p-6 relative overflow-hidden group">
+        <h3 className="text-xs font-bold text-cyan-400 tracking-widest flex items-center gap-3 mb-8 uppercase">
+          <HardDrive size={16}/> Neural Hardware Matrix
         </h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-16">
-           <QuantumGauge label="NEURAL CPU" value={82} unit="GHz" />
-           <QuantumGauge label="HBM VRAM" value={54} unit="GB" color={COLORS.magenta} />
-           <QuantumGauge label="DATA FLUX" value={98} unit="GBPS" color={COLORS.green} />
-           <QuantumGauge label="NODE TEMP" value={31} unit="°C" color={COLORS.yellow} />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
+           <QuantumGauge label="CPU" value={82} unit="GHz" />
+           <QuantumGauge label="VRAM" value={54} unit="GB" color={COLORS.magenta} />
+           <QuantumGauge label="FLUX" value={98} unit="Gbps" color={COLORS.green} />
+           <QuantumGauge label="TEMP" value={31} unit="°C" color={COLORS.yellow} />
         </div>
       </div>
     </div>
@@ -792,154 +793,120 @@ export default function LaruNexusInfinityCore() {
 
   /**
    * 分析パネル (KpiView)
+   * 修正: グラフコンテナのパディング縮小、フォントサイズ調整
    */
   const KpiView = () => (
-    <div className="flex-1 p-10 md:p-20 overflow-y-auto pb-40 md:pb-24 space-y-24 scrollbar-hide bg-gradient-to-b from-black via-[#010101] to-black">
-      <div className="flex items-center justify-between px-8 border-b-2 border-cyan-900/20 pb-12 shadow-2xl">
+    <div className="flex-1 p-4 md:p-8 overflow-y-auto pb-32 md:pb-12 space-y-8 scrollbar-hide">
+      <div className="flex items-center justify-between px-2 border-b border-cyan-900/50 pb-6">
         <div>
-          <h2 className="text-2xl font-black text-white tracking-[0.8em] uppercase border-l-8 border-cyan-500 pl-8 mb-6 italic shadow-[0_0_50px_rgba(0,242,255,0.3)]">Quantum Analytics Cluster</h2>
-          <p className="text-[14px] text-gray-700 uppercase font-black tracking-[0.5em] italic opacity-60">Enterprise Integrity & Scalability Data Matrix V8.5</p>
+          <h2 className="text-xl font-bold text-white tracking-widest uppercase border-l-4 border-cyan-500 pl-4 mb-2">Quantum Analytics</h2>
+          <p className="text-[12px] text-gray-400 tracking-wider">Enterprise Integrity & Scalability</p>
         </div>
-        <div className="hidden md:block text-[14px] text-cyan-900 font-mono tracking-tighter uppercase italic bg-cyan-900/15 px-12 py-4 rounded-full border-2 border-cyan-900/40 shadow-inner italic">ENGINE_OMEGA_STRICT_ACTIVE</div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-16">
-        <div className="xl:col-span-2 border-2 border-cyan-900/40 bg-cyan-950/10 rounded-[6rem] p-16 md:p-24 shadow-[0_0_150px_rgba(0,0,0,1)] relative overflow-hidden group border-double">
-          <div className="absolute -top-60 -right-60 w-[40rem] h-[40rem] bg-cyan-500/5 rounded-full blur-[180px] pointer-events-none group-hover:scale-150 transition-transform duration-[4s]" />
-          <div className="flex justify-between items-center mb-24 relative z-10">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* メイングラフ */}
+        <div className="xl:col-span-2 border border-cyan-500/20 bg-cyan-950/10 rounded-3xl p-6 md:p-8 shadow-lg relative overflow-hidden">
+          <div className="flex justify-between items-center mb-8 relative z-10">
             <div>
-              <h3 className="text-3xl font-black text-white mb-6 uppercase tracking-[0.5em] italic underline underline-offset-[20px] decoration-cyan-900/80 decoration-4">CNS_Global_Traffic_Flux</h3>
-              <p className="text-[14px] text-gray-600 uppercase tracking-[0.4em] font-black italic mt-12 decoration-double underline decoration-cyan-950 underline-offset-4">全分散ノード・リクエスト・時系列・フラックス</p>
+              <h3 className="text-xl font-bold text-white mb-2 tracking-widest">Global Traffic</h3>
+              <p className="text-[12px] text-gray-400">リアルタイム・リクエスト推移</p>
             </div>
-            <div className="flex items-center gap-8 bg-black/60 px-12 py-5 rounded-[2.5rem] border-2 border-white/10 backdrop-blur-2xl shadow-2xl active:scale-95 transition-transform">
-              <span className="w-5 h-5 rounded-full bg-cyan-500 shadow-[0_0_40px_#00f2ff] animate-pulse" />
-              <span className="text-[14px] font-black text-cyan-400 uppercase tracking-[0.5em] italic">LIVE_QUANTUM_SYNCING</span>
+            <div className="hidden md:flex items-center gap-2 bg-black/40 px-4 py-2 rounded-full border border-cyan-500/30">
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+              <span className="text-[10px] font-bold text-cyan-400 tracking-widest">LIVE</span>
             </div>
           </div>
-          <div className="h-[35rem] relative z-10">
+          <div className="h-64 md:h-80 relative z-10">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={kpiData}>
                 <defs>
                   <linearGradient id="colorTrafficInfinity" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={COLORS.cyan} stopOpacity={0.7}/>
+                    <stop offset="5%" stopColor={COLORS.cyan} stopOpacity={0.5}/>
                     <stop offset="95%" stopColor={COLORS.cyan} stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="15 15" stroke="#111" vertical={false} />
-                <XAxis dataKey="name" stroke="#444" fontSize={14} tickLine={false} axisLine={false} fontStyle="italic" fontWeight={900} dy={25} />
-                <YAxis stroke="#444" fontSize={14} tickLine={false} axisLine={false} fontStyle="italic" fontWeight={900} dx={-25} />
-                <Tooltip contentStyle={{ backgroundColor: '#000', border: '3px solid #222', borderRadius: '40px', fontSize: '20px', fontStyle: 'italic', fontWeight: '900', color: '#fff', boxShadow: '0 40px 100px rgba(0,0,0,1)', padding: '20px' }} />
-                <Area type="monotone" dataKey="requests" stroke={COLORS.cyan} strokeWidth={12} fill="url(#colorTrafficInfinity)" isAnimationActive={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
+                <XAxis dataKey="name" stroke="#666" fontSize={10} tickLine={false} axisLine={false} dy={10} />
+                <YAxis stroke="#666" fontSize={10} tickLine={false} axisLine={false} dx={-10} />
+                <Tooltip contentStyle={{ backgroundColor: '#111', border: '1px solid #333', borderRadius: '8px' }} />
+                <Area type="monotone" dataKey="requests" stroke={COLORS.cyan} strokeWidth={2} fill="url(#colorTrafficInfinity)" isAnimationActive={false} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div className="border-2 border-cyan-900/40 bg-cyan-950/10 rounded-[6rem] p-20 flex flex-col items-center shadow-[0_0_150px_rgba(0,0,0,1)] relative overflow-hidden border-double backdrop-blur-2xl">
-          <div className="absolute -bottom-60 -left-60 w-[35rem] h-[35rem] bg-magenta-500/5 rounded-full blur-[150px] pointer-events-none" />
-          <h3 className="text-[20px] font-black text-white mb-20 uppercase tracking-[0.6em] text-center italic border-b-4 border-cyan-900/70 pb-8 w-full shadow-2xl shadow-cyan-900/10 decoration-double underline decoration-cyan-950 underline-offset-8">Resource Balance</h3>
-          <div className="h-96 w-full relative z-10">
+        {/* 円グラフ */}
+        <div className="border border-cyan-500/20 bg-cyan-950/10 rounded-3xl p-6 flex flex-col items-center justify-center relative overflow-hidden">
+          <h3 className="text-lg font-bold text-white mb-4 tracking-widest border-b border-cyan-900/50 pb-2 w-full text-center">Load Balance</h3>
+          <div className="h-48 w-full relative z-10">
              <ResponsiveContainer width="100%" height="100%">
                <PieChart>
-                 <Pie data={projects} dataKey="load" nameKey="name" cx="50%" cy="50%" innerRadius={110} outerRadius={150} paddingAngle={15} stroke="none">
+                 <Pie data={projects} dataKey="load" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} stroke="none">
                     {projects.map((entry: ProjectData, index: number) => (
-                      <Cell key={`cell-inf-${index}`} fill={index === 1 ? COLORS.red : index === 3 ? COLORS.yellow : COLORS.cyan} opacity={0.4 + (index * 0.2)} className="hover:scale-110 transition-transform duration-1000 origin-center cursor-pointer shadow-2xl" />
+                      <Cell key={`cell-inf-${index}`} fill={index === 1 ? COLORS.red : index === 3 ? COLORS.yellow : COLORS.cyan} className="outline-none" />
                     ))}
                  </Pie>
                  <Tooltip />
                </PieChart>
              </ResponsiveContainer>
           </div>
-          <div className="grid grid-cols-1 gap-y-10 mt-20 w-full relative z-10 border-t border-white/5 pt-10">
+          <div className="grid grid-cols-1 gap-y-3 mt-4 w-full relative z-10">
              {projects.map((p: ProjectData, i: number) => (
-               <div key={`legend-inf-${p.id}`} className="flex items-center justify-between group cursor-default transition-all duration-700 hover:translate-x-6">
-                 <div className="flex items-center gap-8">
-                    <div className="w-4 h-4 rounded-full shadow-[0_0_20px_currentColor] transition-all duration-1000 group-hover:scale-150 group-hover:rotate-[360deg]" style={{ color: i === 1 ? COLORS.red : i === 3 ? COLORS.yellow : COLORS.cyan, backgroundColor: 'currentColor' }} />
-                    <span className="text-[15px] text-gray-600 font-black uppercase tracking-[0.4em] group-hover:text-cyan-400 transition-colors italic decoration-cyan-950 underline underline-offset-4">{p.name}</span>
+               <div key={`legend-inf-${p.id}`} className="flex items-center justify-between">
+                 <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: i === 1 ? COLORS.red : i === 3 ? COLORS.yellow : COLORS.cyan }} />
+                    <span className="text-[11px] text-gray-300 font-bold uppercase tracking-wider truncate max-w-[120px]">{p.name}</span>
                  </div>
-                 <span className="text-3xl font-black text-white italic tracking-tighter group-hover:scale-125 transition-transform duration-1000 group-hover:text-cyan-400 drop-shadow-2xl">{p.load}%</span>
+                 <span className="text-sm font-bold text-white font-mono">{p.load}%</span>
                </div>
              ))}
           </div>
         </div>
       </div>
-
-      <div className="border-t-4 border-cyan-900/60 pt-32 relative overflow-hidden border-double pb-20">
-         <div className="absolute bottom-0 right-0 w-[50rem] h-[50rem] bg-yellow-500/5 rounded-full blur-[250px] pointer-events-none" />
-         <div className="flex items-center gap-12 mb-24 px-14 relative z-10">
-            <div className="p-12 bg-yellow-500/10 rounded-[3rem] border-2 border-yellow-500/50 shadow-[0_0_100px_rgba(234,255,0,0.2)] scale-125 transform -rotate-12 group hover:rotate-0 transition-transform duration-[1s]">
-               <Briefcase size={64} className="text-yellow-500 animate-pulse" />
-            </div>
-            <div className="space-y-6">
-               <h3 className="text-6xl font-black text-yellow-500 tracking-[0.5em] uppercase italic italic drop-shadow-[0_0_40px_rgba(234,255,0,0.4)]">Profit_Matrix_V8.5</h3>
-               <p className="text-[16px] text-yellow-900 uppercase font-black tracking-[0.8em] italic opacity-80 border-l-4 border-yellow-800/60 pl-10 leading-none">External_Project_Monitoring & SLA_Compliance_Matrix</p>
-            </div>
-         </div>
-         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-24 relative z-10 px-10">
-            <StatBox label="総受託収益予測 (Q1)" value="¥6,420,000" sub="Q1 伸長率: +145% (指数関数的成長)" color="text-yellow-400" />
-            <StatBox label="平均SLA応答速度" value="122.4 ms" sub="品質基準: SUPREME_OPTIMAL" color="text-green-500" />
-            <StatBox label="未処理クリティカル数" value="0" sub="異常なし: インフラ健全性 100%" color="text-cyan-500" />
-         </div>
+      
+      {/* 統計ボックス */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-8 border-t border-cyan-900/30">
+        <StatBox label="総受託収益予測 (Q1)" value="¥6.42M" sub="+145% Growth" color="text-yellow-400" />
+        <StatBox label="平均SLA応答" value="122ms" sub="Optimal" color="text-green-400" />
+        <StatBox label="未処理アラート" value="0" sub="System Safe" color="text-cyan-400" />
       </div>
     </div>
   );
 
   /**
    * 履歴 & ロードマップ (HistoryView)
+   * 修正: フォントサイズの大幅縮小、コンテナの幅調整
    */
   const HistoryView = () => (
-    <div className="flex-1 p-10 md:p-24 overflow-y-auto pb-40 md:pb-24 scrollbar-hide relative">
-      <div className="absolute top-0 left-0 w-full h-full opacity-[0.05] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at center, #00f2ff, transparent)' }} />
-      <div className="max-w-7xl mx-auto space-y-32 relative z-10">
-        <header className="text-center space-y-12">
-          <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="inline-block px-14 py-5 border border-cyan-500/60 rounded-full bg-cyan-500/15 text-[15px] text-cyan-400 font-black uppercase tracking-[1.2em] italic shadow-[0_0_60px_rgba(0,242,255,0.3)] backdrop-blur-3xl">Strategic Archives</motion.div>
-          <h1 className="text-7xl md:text-[12rem] font-black text-white tracking-tighter uppercase italic italic drop-shadow-[0_0_80px_rgba(0,242,255,0.4)] leading-none">要塞ロードマップ 2026</h1>
-          <div className="w-96 h-3 bg-gradient-to-r from-transparent via-cyan-500 to-transparent mx-auto rounded-full shadow-[0_0_40px_#00f2ff]" />
-          <p className="text-lg md:text-2xl text-cyan-950 max-w-5xl mx-auto leading-loose font-black uppercase tracking-widest italic opacity-80 border-x-4 border-cyan-900/40 px-20">
-            齋藤ホールディングスの未来を決定づける20のイニシアチブ。<br/>これらは社長、齋藤拓実の意志を反映し、自律的に無限進化を続けます。
+    <div className="flex-1 p-4 md:p-12 overflow-y-auto pb-32 md:pb-12 scrollbar-hide relative">
+      <div className="max-w-5xl mx-auto space-y-16 relative z-10">
+        <header className="text-center space-y-6">
+          <div className="inline-block px-6 py-2 border border-cyan-500/40 rounded-full bg-cyan-500/10 text-[12px] text-cyan-300 font-bold uppercase tracking-widest backdrop-blur-md">Strategic Archives</div>
+          <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter uppercase italic drop-shadow-lg leading-none">Roadmap 2026</h1>
+          <p className="text-sm md:text-base text-gray-400 max-w-2xl mx-auto leading-relaxed font-bold tracking-wider">
+            齋藤ホールディングスの未来を決定づけるイニシアチブ。<br/>自律的に無限進化を続けます。
           </p>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-20">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {strategicRoadmap.map((item: RoadmapItem, index: number) => (
-            <motion.div key={item.id} initial={{ opacity: 0, x: index % 2 === 0 ? -40 : 40 }} whileInView={{ opacity: 1, x: 0 }} whileHover={{ y: -30, scale: 1.05 }} transition={{ duration: 1, type: "spring", bounce: 0.3 }} className="p-16 border border-cyan-900/40 bg-cyan-950/5 rounded-[6rem] relative overflow-hidden group shadow-[0_0_100px_rgba(0,0,0,0.8)] backdrop-blur-2xl border-double active:scale-95">
-              <div className="absolute top-0 right-0 p-16 opacity-[0.06] group-hover:opacity-30 transition-all duration-[2s] text-cyan-500 rotate-12 group-hover:rotate-0">{item.category === 'AI' ? <Cpu size={240}/> : <Shield size={240}/>}</div>
-              <div className="flex justify-between items-start mb-16 relative z-10">
-                <span className="text-[14px] font-black text-cyan-500 bg-cyan-900/50 border-2 border-cyan-900/80 px-10 py-4 rounded-[2rem] tracking-[0.4em] uppercase italic shadow-2xl backdrop-blur-xl">{item.category}</span>
-                <div className="flex items-center gap-6 bg-black/80 px-8 py-3 rounded-full border border-white/10 shadow-2xl">
-                   <div className={`w-4 h-4 rounded-full ${item.status === 'ACTIVE' ? 'bg-green-500 animate-pulse shadow-[0_0_25px_#22c55e]' : 'bg-gray-800'}`} />
-                   <span className={`text-[14px] font-black tracking-[0.3em] uppercase ${item.status === 'ACTIVE' ? 'text-green-400' : 'text-gray-700'}`}>{item.status}</span>
-                </div>
+            <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} className="p-6 md:p-8 border border-cyan-500/20 bg-cyan-950/5 rounded-3xl relative overflow-hidden group hover:border-cyan-500/40 transition-colors backdrop-blur-sm">
+              <div className="flex justify-between items-start mb-6">
+                <span className="text-[10px] font-bold text-cyan-300 bg-cyan-900/40 px-3 py-1 rounded-full tracking-widest uppercase border border-cyan-500/20">{item.category}</span>
+                <div className={`w-2 h-2 rounded-full ${item.status === 'ACTIVE' ? 'bg-green-500 animate-pulse shadow-[0_0_10px_#22c55e]' : 'bg-gray-700'}`} />
               </div>
-              <h3 className="text-5xl font-black text-white mb-10 tracking-tighter italic uppercase group-hover:text-cyan-400 transition-all duration-700 underline underline-offset-[20px] decoration-cyan-900/40">{item.name}</h3>
-              <p className="text-[18px] text-gray-500 mb-16 leading-relaxed font-bold uppercase tracking-tight opacity-80 group-hover:opacity-100 transition-opacity border-l-4 border-cyan-900/20 pl-10">{item.desc}</p>
+              <h3 className="text-2xl font-bold text-white mb-4 tracking-tight group-hover:text-cyan-400 transition-colors">{item.name}</h3>
+              <p className="text-sm text-gray-400 mb-6 leading-relaxed">{item.desc}</p>
               
-              <div className="space-y-6 relative z-10">
-                <div className="flex justify-between text-[14px] font-black text-cyan-800 uppercase tracking-widest italic font-mono mb-2"><span>Deployment_Phase_Integrity</span><span>{item.progress}%</span></div>
-                <div className="w-full h-4 bg-gray-950 rounded-full overflow-hidden shadow-inner border border-white/5 relative">
-                  <motion.div initial={{ width: 0 }} whileInView={{ width: `${item.progress}%` }} transition={{ duration: 3, ease: "circOut" }} className="h-full bg-cyan-500 shadow-[0_0_40px_#00f2ff] relative">
-                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-shimmer" />
-                  </motion.div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-[10px] font-bold text-gray-500 uppercase tracking-wider"><span>Progress</span><span>{item.progress}%</span></div>
+                <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                  <motion.div initial={{ width: 0 }} whileInView={{ width: `${item.progress}%` }} transition={{ duration: 1 }} className="h-full bg-cyan-500" />
                 </div>
-              </div>
-
-              <div className="mt-20 pt-14 border-t border-white/10 flex flex-col gap-10 relative z-10">
-                <div className="text-[15px] text-gray-600 leading-loose italic border-l-8 border-cyan-950 pl-12 bg-white/5 p-10 rounded-[3rem] shadow-inner">
-                  <span className="text-cyan-950 font-black uppercase tracking-[0.4em] mb-6 block underline underline-offset-[16px] decoration-cyan-900/50 italic">Strategic_Group_Value:</span>
-                  {item.benefits}
-                </div>
-                <button onClick={() => { sfx.play('click'); handleCommand(`${item.name}の現在の実装フェーズを深層解析し、齋藤社長へ収益化に向けた具体的プロセスを報告せよ。`); }} className="w-full py-10 bg-white/5 border-4 border-cyan-500/20 rounded-[3.5rem] text-[16px] font-black text-cyan-500 hover:bg-cyan-500 hover:text-black transition-all duration-1000 uppercase tracking-[0.8em] shadow-[0_0_80px_rgba(0,242,255,0.2)] active:scale-95 italic border-dashed group/btn overflow-hidden">
-                  <span className="relative z-10 group-hover/btn:scale-110 transition-transform block">討論シーケンス緊急起動</span>
-                  <div className="absolute inset-0 bg-cyan-500 opacity-0 group-hover/btn:opacity-10 transition-opacity" />
-                </button>
               </div>
             </motion.div>
           ))}
-        </div>
-        
-        <div className="text-center py-40 opacity-10 group hover:opacity-50 transition-opacity duration-[4s]">
-           <Lock size={160} className="mx-auto text-cyan-900 mb-16 group-hover:rotate-[-10deg] group-hover:scale-125 transition-all duration-[3s] ease-in-out shadow-2xl" />
-           <p className="text-[20px] text-cyan-950 font-black tracking-[1.5em] uppercase italic">Deep_Cryptographic_Layer: Only_President_Saito_Authorized</p>
         </div>
       </div>
     </div>
@@ -1272,24 +1239,22 @@ function QuickActionBtn({ icon, cmd, desc, onClick }: { icon: React.ReactNode, c
 // ゲージ・スタッツ
 function QuantumGauge({ label, value, unit, color = COLORS.cyan }: { label: string, value: number, unit: string, color?: string }) {
   return (
-    <div className="flex flex-col items-center gap-10 p-14 border-2 border-white/5 rounded-[4.5rem] bg-black/70 group hover:border-cyan-500/60 transition-all duration-[1s] shadow-[0_40px_100px_rgba(0,0,0,0.8)] relative overflow-hidden group border-double active:scale-95">
-       <div className="absolute inset-0 bg-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-[1.5s] pointer-events-none" />
-       <div className="relative w-40 h-40 group-hover:scale-110 transition-transform duration-[1s]">
-          <svg className="w-full h-full transform -rotate-90 scale-125 transition-transform duration-1000 group-hover:rotate-0">
-             <circle cx="80" cy="80" r="74" stroke="currentColor" strokeWidth="5" fill="transparent" className="text-gray-950 shadow-inner" />
+    <div className="flex flex-col items-center gap-4 p-4 border border-white/5 rounded-2xl bg-black/40 hover:border-cyan-500/40 transition-all relative overflow-hidden">
+       <div className="relative w-20 h-20">
+          <svg className="w-full h-full transform -rotate-90">
+             <circle cx="40" cy="40" r="36" stroke="#222" strokeWidth="4" fill="transparent" />
              <motion.circle 
-               cx="80" cy="80" r="74" stroke={color} strokeWidth="6" fill="transparent" 
-               strokeDasharray={465} strokeDashoffset={465 - (465 * value / 100)}
-               className="shadow-[0_0_40px_currentColor]"
-               transition={{ duration: 4, ease: "circOut" }}
+               cx="40" cy="40" r="36" stroke={color} strokeWidth="4" fill="transparent" 
+               strokeDasharray={226} strokeDashoffset={226 - (226 * value / 100)}
+               transition={{ duration: 2 }}
              />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-             <span className="text-4xl font-black text-white italic tracking-tighter group-hover:scale-125 transition-transform duration-1000 drop-shadow-2xl">{value}</span>
-             <span className="text-[12px] text-cyan-900 font-black uppercase tracking-[0.5em] mt-3 italic opacity-60 underline decoration-cyan-950 underline-offset-4">{unit}</span>
+             <span className="text-lg font-bold text-white tracking-tighter">{value}</span>
+             <span className="text-[9px] text-gray-500 font-bold uppercase">{unit}</span>
           </div>
        </div>
-       <span className="text-[13px] font-black text-gray-700 tracking-[0.6em] uppercase group-hover:text-cyan-400 transition-all italic duration-[1s] border-t-2 border-white/5 pt-6 w-full text-center group-hover:border-cyan-900/40 tracking-widest">{label}</span>
+       <span className="text-[10px] font-bold text-gray-400 tracking-widest uppercase">{label}</span>
     </div>
   );
 }
@@ -1297,11 +1262,10 @@ function QuantumGauge({ label, value, unit, color = COLORS.cyan }: { label: stri
 // 統計ボックス
 function StatBox({ label, value, sub, color = "text-white" }: { label: string, value: string, sub: string, color?: string }) {
   return (
-    <div className="bg-white/5 border-2 border-white/5 p-14 rounded-[5rem] hover:bg-cyan-500/5 transition-all duration-1000 group shadow-[0_0_100px_rgba(0,0,0,0.9)] relative overflow-hidden active:scale-98">
-       <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-tr from-white/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
-       <div className="text-[14px] text-gray-700 font-black uppercase tracking-[0.6em] mb-10 group-hover:text-cyan-800 italic transition-all border-b border-white/5 pb-4 w-fit">// {label}</div>
-       <div className={`text-6xl font-black italic tracking-tighter mb-5 ${color} drop-shadow-[0_0_40px_rgba(255,255,255,0.3)] group-hover:scale-105 transition-transform duration-700`}>{value}</div>
-       <div className="text-[14px] text-cyan-950 font-black tracking-[0.4em] uppercase italic opacity-40 group-hover:opacity-100 transition-all">{sub}</div>
+    <div className="bg-white/5 border border-white/5 p-6 rounded-3xl hover:bg-white/10 transition-all">
+       <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-2">{label}</div>
+       <div className={`text-3xl font-black italic tracking-tighter mb-2 ${color}`}>{value}</div>
+       <div className="text-[10px] text-gray-400 font-bold tracking-wider">{sub}</div>
     </div>
   );
 }
