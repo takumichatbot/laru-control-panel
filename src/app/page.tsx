@@ -457,7 +457,7 @@ export default function LaruNexusInfinityCore() {
   // --- C. コア・ロジック実装 ---
 
   /**
-   * システムログ追加 (SFX/ハプティクス/視覚統合)
+   * システムログ追加 (SFX/ハプティクス/視覚統合 + 音声合成)
    */
   const addLog = useCallback((msg: string, type: LogEntry['type'] = 'sys', imageUrl?: string) => {
     const time = new Date().toLocaleTimeString('ja-JP', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -471,17 +471,28 @@ export default function LaruNexusInfinityCore() {
     else if (type === 'browser') sfx.play('camera');
     else sfx.play('click');
 
+    // ★追加: AIの回答(gemini)の場合のみ、音声で読み上げる
+    if (type === 'gemini' && useVoice && typeof window !== 'undefined') {
+      // 既存の発話をキャンセル
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(msg);
+      utterance.lang = 'ja-JP';
+      utterance.rate = 1.2; // 少し早口で司令官らしく
+      utterance.pitch = 0.8; // 少し低音で
+      window.speechSynthesis.speak(utterance);
+    }
+
     // ブラウザ・プッシュ通知
     if (type === 'success' && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
       new Notification("NEXUS 司令完了", { body: msg });
     }
 
-    // スマホバイブレーション (ハプティクス)
+    // スマホバイブレーション
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
       if (type === 'alert') navigator.vibrate([200, 100, 200]);
       else if (type === 'success') navigator.vibrate(50);
     }
-  }, []);
+  }, [useVoice]); // useVoiceを依存配列に追加
 
   /**
    * WebSocket接続 & リアルタイム監視
@@ -732,7 +743,11 @@ export default function LaruNexusInfinityCore() {
                 {log.imageUrl && (
                   <img src={log.imageUrl} alt="Capture" className="w-full h-auto rounded-lg mb-3 border border-white/10" onClick={() => window.open(log.imageUrl)} />
                 )}
-                {log.type === 'gemini' || log.type === 'sys' ? <MatrixText text={log.msg} speed={5} /> : log.msg}
+                {log.type === 'gemini' ? (
+                  <MatrixText text={log.msg} speed={5} />
+                ) : (
+                  log.msg
+                )}
               </div>
             </motion.div>
           ))}
