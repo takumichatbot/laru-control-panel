@@ -1,0 +1,115 @@
+{
+  "name": "LARU-Nexus",
+  "short_name": "Nexus",
+  "description": "⚡ LARU-Nexus - 事業統括ハイテク要塞 | サイバーパンク管理ダッシュボード",
+  "theme_color": "#00FFFF",
+  "background_color": "#000000",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "scope": "/",
+  "start_url": "/",
+  "lang": "ja",
+  "dir": "ltr",
+  "prefer_related_applications": false,
+  "categories": ["productivity", "utilities", "business"],
+  "icons": [
+    {
+      "src": "/icons/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/apple-touch-icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "統合システムテスト",
+      "short_name": "統合テスト",
+      "description": "全3サイト（Flastal, LARUbot, LARUVISONA）の死活監視とAI整合性テスト",
+      "url": "/?action=integrated-test",
+      "icons": [
+        {
+          "src": "/icons/test-shortcut-96x96.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "LARUbot管理",
+      "short_name": "LARUbot",
+      "description": "AIチャットボットの応答数・エラー率・満足度確認",
+      "url": "/?tab=larubot",
+      "icons": [
+        {
+          "src": "/icons/larubot-shortcut-96x96.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "LARUVISONA管理",
+      "short_name": "LARUVISONA",
+      "description": "会社公式サイトのPV・未読問い合わせ確認",
+      "url": "/?tab=laruvisona",
+      "icons": [
+        {
+          "src": "/icons/laruvisona-shortcut-96x96.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Gemini Live Command",
+      "short_name": "Command",
+      "description": "音声コマンドログとLive連携インターフェース",
+      "url": "/?tab=command",
+      "icons": [
+        {
+          "src": "/icons/gemini-shortcut-96x96.png",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/nexus-desktop-1.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "LARU-Nexus デスクトップ統合ダッシュボード"
+    },
+    {
+      "src": "/screenshots/nexus-mobile-1.png",
+      "sizes": "414x896",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "LARU-Nexus モバイル管理画面"
+    },
+    {
+      "src": "/screenshots/nexus-cyberpunk-1.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "サイバーパンクUI・リアルタイムシステム監視"
+    }
+  ],
+  "display_override": ["window-controls-overlay", "standalone"],
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  }
+}

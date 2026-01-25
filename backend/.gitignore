@@ -1,0 +1,32 @@
+# --- セキュリティ（絶対にアップロードしない） ---
+.env
+.env.local
+.env.*.local
+
+# --- Python 関連 ---
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env/
+build/
+dist/
+*.egg-info/
+
+# --- データベース（ローカルの取引履歴やログ） ---
+*.db
+*.sqlite3
+
+# --- OS 固有ファイル ---
+.DS_Store
+Thumbs.db
+
+# --- Playwright (ブラウザエンジン) ---
+/screenshots/
+/videos/
+/trace/
+
+# --- テスト関連 ---
+test_moomoo.py

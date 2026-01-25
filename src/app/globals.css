@@ -1,0 +1,77 @@
+/* ▼▼▼ この3行が絶対に必要です ▼▼▼ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+/* ▲▲▲ ここまで ▲▲▲ */
+
+/* LARU NEXUS COMMAND - ULTIMATE FORTRESS OS */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Noto+Sans+JP:wght@400;700;900&display=swap');
+
+:root {
+  --neon-cyan: #00f2ff;
+  --neon-magenta: #ff006e;
+  --neon-green: #39ff14;
+  --warning: #ffaa00;
+  --danger: #ff0040;
+  --terminal-bg: rgba(5, 5, 5, 0.95);
+  --foreground-rgb: 0, 242, 255;
+  --background-start-rgb: 5, 5, 5;
+  --background-end-rgb: 0, 0, 0;
+}
+
+body {
+  background: #000;
+  color: #fff;
+  font-family: 'JetBrains Mono', 'Noto Sans JP', monospace;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* 以下、社長のデザイン設定を活かします */
+.nexus-fortress::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: 
+    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.3) 50%),
+    linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+  background-size: 100% 2px, 3px 100%;
+  z-index: 1000;
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+.grid-overlay {
+  position: fixed;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(0, 242, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 242, 255, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+  z-index: 1;
+  animation: gridPulse 10s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes gridPulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.02); }
+}
+
+/* スクロールバーのカスタマイズ */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #000; }
+::-webkit-scrollbar-thumb { background: #003333; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #00f2ff; }
+
+
+/* チャットバブル内のテキストを選択可能にする */
+.chat-bubble, .gemini-message, p, span {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+/* 思考中アニメーションなどが重なってクリックを邪魔しないようにする */
+.thinking-indicator {
+  pointer-events: none;
+}

@@ -1,0 +1,233 @@
+'use client';
+
+import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
+import { 
+  ArrowLeft, Terminal, Send, Cpu, Github, 
+  Code, Loader2, ShieldCheck, AlertCircle, ImageIcon 
+} from 'lucide-react';
+// import { sfx } from '@/lib/audio'; 
+
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL 
+  ? `${process.env.NEXT_PUBLIC_WS_URL}/DEV`
+  : "wss://laru-brain.onrender.com/ws/DEV";
+
+type Message = {
+  role: 'user' | 'ai' | 'system';
+  text: string;
+  time: string;
+  image?: string;
+};
+
+const REPOS = [
+  { id: 'larubot', name: 'LARU_BOT', desc: 'AI Chat Service' },
+  { id: 'flastal', name: 'FLASTAL', desc: 'Client Work' },
+  { id: 'laruvisona', name: 'LARU_VISONA', desc: 'Image Gen' },
+  { id: 'larunexus', name: 'LARU_NEXUS', desc: 'Core System' },
+];
+
+export default function DevConsole() {
+  const [activeRepo, setActiveRepo] = useState('larubot');
+  const [input, setInput] = useState('');
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  
+  const wsRef = useRef<WebSocket | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const connect = () => {
+      const ws = new WebSocket(WS_URL);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setIsConnected(true);
+        addMessage('system', 'SECURE CONNECTION ESTABLISHED. DEV_CHANNEL: ACTIVE.');
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'LOG' && data.payload) {
+          const { msg, type } = data.payload;
+          if (type === 'gemini') {
+            setIsTyping(false);
+            addMessage('ai', msg);
+          } else if (type === 'error') {
+            addMessage('system', `ERROR: ${msg}`);
+          } else if (type === 'thinking') {
+             setIsTyping(true);
+          }
+        }
+      };
+
+      ws.onclose = () => {
+        setIsConnected(false);
+        setTimeout(connect, 3000);
+      };
+    };
+
+    connect();
+    return () => { wsRef.current?.close(); };
+  }, []);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isTyping]);
+
+  const addMessage = (role: Message['role'], text: string, image?: string) => {
+    setMessages(prev => [...prev, {
+      role, text, time: new Date().toLocaleTimeString(), image
+    }]);
+  };
+
+  const handleSend = () => {
+    if (!input.trim() || !isConnected) return;
+    const commandWithContext = `[Target Repo: ${activeRepo}] ${input}`;
+    
+    wsRef.current?.send(JSON.stringify({ type: 'CHAT', command: commandWithContext }));
+    addMessage('user', input);
+    setInput('');
+    setIsTyping(true);
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !wsRef.current) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      const base64Data = base64.split(',')[1];
+      addMessage('user', 'Uploaded Screenshot Analysis Request', base64);
+      setIsTyping(true);
+      wsRef.current?.send(JSON.stringify({
+        type: 'REALTIME_INPUT',
+        image: base64Data,
+        text: `[Target Repo: ${activeRepo}] Analyze this image.`
+      }));
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  return (
+    <div className="h-[100dvh] bg-zinc-950 text-zinc-300 font-mono flex flex-col md:flex-row overflow-hidden selection:bg-purple-500/30">
+      
+      {/* SIDEBAR */}
+      <div className="w-full md:w-64 bg-black border-r border-zinc-800 flex flex-col shrink-0">
+        <div className="h-14 border-b border-zinc-800 flex items-center px-4 gap-3 bg-zinc-900/50">
+          <Link href="/" className="text-zinc-500 hover:text-white transition-colors">
+            <ArrowLeft size={18} />
+          </Link>
+          <div className="font-bold text-sm tracking-wider text-purple-400">DEV_CONSOLE</div>
+        </div>
+        
+        <div className="p-3 flex flex-col gap-2 overflow-y-auto flex-1">
+           <div className="text-[10px] font-bold text-zinc-600 px-2 mb-1">TARGET REPOSITORY</div>
+           {REPOS.map(repo => (
+             <button
+               key={repo.id}
+               onClick={() => setActiveRepo(repo.id)}
+               className={`text-left p-3 rounded-lg border transition-all group relative overflow-hidden ${
+                 activeRepo === repo.id 
+                   ? 'bg-purple-900/10 border-purple-500/40 text-purple-200' 
+                   : 'bg-zinc-900/30 border-zinc-800 text-zinc-500 hover:bg-zinc-900'
+               }`}
+             >
+                <div className="flex items-center gap-2 mb-1 relative z-10">
+                   <Github size={14} />
+                   <span className="font-bold text-xs">{repo.name}</span>
+                </div>
+                <div className="text-[10px] opacity-70 relative z-10">{repo.desc}</div>
+                {activeRepo === repo.id && <div className="absolute inset-0 bg-purple-500/5 animate-pulse z-0"/>}
+             </button>
+           ))}
+        </div>
+        
+        <div className="p-4 border-t border-zinc-800 bg-zinc-900/20">
+           <div className="flex items-center gap-2 text-[10px]">
+             <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-red-500'}`}/>
+             <span>{isConnected ? 'SYSTEM ONLINE' : 'DISCONNECTED'}</span>
+           </div>
+        </div>
+      </div>
+
+      {/* CHAT AREA */}
+      <div className="flex-1 flex flex-col min-w-0 bg-zinc-950 relative">
+        <div className="h-14 border-b border-zinc-800 flex items-center justify-between px-6 bg-zinc-900/50 backdrop-blur shrink-0 z-10">
+           <div className="flex items-center gap-3">
+              <Terminal size={18} className="text-purple-500"/>
+              <span className="font-bold text-sm">
+                Target: <span className="text-white">{activeRepo.toUpperCase()}</span>
+              </span>
+           </div>
+           <div className="flex items-center gap-2 text-[10px] text-zinc-500 bg-black/40 px-3 py-1 rounded-full border border-zinc-800">
+              <ShieldCheck size={12} className="text-emerald-500"/>
+              WRITE_ACCESS
+           </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 scrollbar-thin scrollbar-thumb-zinc-800">
+           {messages.length === 0 && (
+             <div className="flex flex-col items-center justify-center h-full text-zinc-700 gap-4 opacity-50">
+               <Cpu size={48} />
+               <p className="text-xs text-center">AWAITING INSTRUCTIONS...</p>
+             </div>
+           )}
+           
+           {messages.map((m, i) => (
+             <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+               {m.role !== 'user' && (
+                 <div className={`w-8 h-8 rounded flex items-center justify-center shrink-0 ${m.role === 'ai' ? 'bg-purple-900/20 text-purple-400' : 'bg-zinc-800 text-zinc-400'}`}>
+                   {m.role === 'ai' ? <Cpu size={16}/> : <AlertCircle size={16}/>}
+                 </div>
+               )}
+               <div className={`max-w-[85%] space-y-1`}>
+                  <div className={`flex items-center gap-2 text-[10px] ${m.role === 'user' ? 'justify-end text-zinc-500' : 'text-zinc-500'}`}>
+                    <span>{m.role === 'user' ? 'YOU' : 'GOD_AI'}</span>
+                    <span>{m.time}</span>
+                  </div>
+                  {m.image && <img src={m.image} alt="Upload" className="rounded border border-zinc-700 max-w-xs mb-2" />}
+                  <div className={`p-3 rounded text-xs md:text-sm font-mono whitespace-pre-wrap leading-relaxed ${
+                    m.role === 'user' 
+                      ? 'bg-zinc-800 text-white border border-zinc-700' 
+                      : (m.role === 'ai' ? 'bg-purple-950/10 text-purple-100 border border-purple-500/20' : 'bg-red-900/10 text-red-300 border-red-900/30')
+                  }`}>
+                    {m.text}
+                  </div>
+               </div>
+             </div>
+           ))}
+           {isTyping && <div className="text-xs text-purple-400 animate-pulse ml-12">Generating response...</div>}
+           <div ref={messagesEndRef} />
+        </div>
+
+        <div className="p-4 bg-black border-t border-zinc-800 shrink-0">
+           <div className="flex gap-2 max-w-4xl mx-auto">
+              <button onClick={() => fileInputRef.current?.click()} className="p-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-zinc-400 transition-colors">
+                <ImageIcon size={20} />
+              </button>
+              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
+              
+              <div className="relative flex-1">
+                <input 
+                  type="text" 
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+                  placeholder={`Command to ${activeRepo}...`}
+                  className="w-full bg-zinc-900 border border-zinc-800 text-white pl-4 pr-12 py-3 rounded-lg focus:outline-none focus:border-purple-500/50 font-mono text-sm"
+                  disabled={!isConnected}
+                />
+                <button onClick={handleSend} disabled={!input.trim()} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded transition-colors disabled:opacity-50">
+                   <Send size={16} />
+                </button>
+              </div>
+           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
