@@ -293,14 +293,17 @@ TODAY_PNL = 0.0           # 今日の損益（起動時リセット）
 LAST_RESET_DAY = datetime.now().day
 
 # エラーハンドリング
+wallet = None  # 先に空っぽで作っておく
+
 if not AGENT_PRIVATE_KEY or not ACCOUNT_ADDRESS:
-    print("⚠️  Hyperliquidの鍵設定が足りません！ export コマンドを確認してください。")
-    # テスト用に動かすなら、ここに直接文字列を入れても動きますが、本番は環境変数推奨
+    print("⚠️  Hyperliquidの鍵設定が足りません（Devモード、または設定ミス）")
 else:
     print("✅ Hyperliquid設定読み込み完了")
-
-# 【重要修正】秘密鍵文字列を「アカウントオブジェクト」に変換
-wallet = Account.from_key(AGENT_PRIVATE_KEY)
+    # 鍵がある時だけ、財布を作る
+    try:
+        wallet = Account.from_key(AGENT_PRIVATE_KEY)
+    except Exception as e:
+        print(f"Wallet Load Error: {e}")
 
 # SDKの初期化（ここではグローバル変数として定義だけしておく）
 info = None

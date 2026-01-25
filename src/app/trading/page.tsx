@@ -8,10 +8,12 @@ import {
   Cpu, Zap, Layers, Terminal
 } from 'lucide-react';
 
-// WebSocket URL設定
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL 
-  ? `${process.env.NEXT_PUBLIC_WS_URL}/TRADING`
-  : "wss://laru-brain.onrender.com/ws/TRADING";
+// 【修正】接続先を自動判定（Render対応）
+const getWebSocketUrl = () => {
+  if (typeof window === 'undefined') return '';
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}/ws/TRADING`;
+};
 
 type OrderItem = { p: number; s: number };
 type L2Data = { bids: OrderItem[]; asks: OrderItem[] };
@@ -25,13 +27,13 @@ type PositionData = {
 type AiInfo = {
   sentiment: string;
   confidence: number;
-  reasons?: string[]; // AIの判断理由を追加
+  reasons?: string[];
 };
 type LogItem = { time: string; msg: string; color: string };
 type MobileTab = 'ORDERBOOK' | 'TRADE' | 'LOGS';
 
 export default function TradingTerminal() {
-  const [ticker, setTicker] = useState("SCANNING..."); // 初期値
+  const [ticker, setTicker] = useState("SCANNING...");
   const [currentPrice, setCurrentPrice] = useState<number>(0);
   const [isAuto, setIsAuto] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
@@ -41,14 +43,12 @@ export default function TradingTerminal() {
   // チャート関連
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const areaSeriesRef = useRef<ISeriesApi<"Area"> | null>(null); // エリアチャートに変更
-  const entryLineRef = useRef<IPriceLine | null>(null);
+  const areaSeriesRef = useRef<ISeriesApi<"Area"> | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   const [orderBook, setOrderBook] = useState<L2Data>({ bids: [], asks: [] });
   const [tape, setTape] = useState<{p:number, s:number, side:'buy'|'sell', time:string}[]>([]);
   const [aiInfo, setAiInfo] = useState<AiInfo>({ sentiment: 'WAITING...', confidence: 0, reasons: [] });
-  const [position, setPosition] = useState<PositionData>({ size: 0, entryPrice: 0, pnl: 0, roe: 0, liqPrice: 0 });
   const [logs, setLogs] = useState<LogItem[]>([]);
 
   // --------------------------------------------------------------------------
@@ -69,11 +69,12 @@ export default function TradingTerminal() {
   };
 
   // --------------------------------------------------------------------------
-  // 1. チャート初期化 (Area Chart for Scanner Mode)
+  // 1. チャート初期化
   // --------------------------------------------------------------------------
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
+    // クリーンアップ
     if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;
@@ -102,7 +103,6 @@ export default function TradingTerminal() {
       crosshair: { mode: CrosshairMode.Normal },
     });
 
-    // エリアチャート（心電図のような見た目）
     const areaSeries = chart.addSeries(AreaSeries, {
       topColor: 'rgba(6, 182, 212, 0.56)',
       bottomColor: 'rgba(6, 182, 212, 0.04)',
@@ -137,9 +137,14 @@ export default function TradingTerminal() {
   useEffect(() => {
     let ws: WebSocket;
     let pingInterval: NodeJS.Timeout;
+    let reconnectTimeout: NodeJS.Timeout;
 
     const connect = () => {
-      ws = new WebSocket(WS_URL);
+      const wsUrl = getWebSocketUrl();
+      if (!wsUrl) return;
+
+      console.log('Connecting to Trading WS:', wsUrl);
+      ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -155,31 +160,21 @@ export default function TradingTerminal() {
         try {
           const data = JSON.parse(event.data);
           
-          // ■ スキャナーからの更新データ
           if (data.type === "MARKET_UPDATE") {
             const { coin, price, confidence, sentiment, reasons } = data;
             
-            // 銘柄切り替え検知
             setTicker(coin);
             setCurrentPrice(price);
             
-            // チャート更新 (タイムスタンプは現在時刻)
             if (areaSeriesRef.current) {
                 areaSeriesRef.current.update({ time: Math.floor(Date.now() / 1000) as any, value: price });
             }
 
-            // AI情報更新
             setAiInfo({ sentiment, confidence, reasons });
-
-            // 擬似板情報生成
             setOrderBook(generateSyntheticOrderBook(price));
-            
-            // テープ演出
             generateTapeEffect(price, coin);
 
-            // ログにAIの思考を出力 (信頼度が高い時だけ)
             if (confidence > 50) {
-                 // 同じログが連続しないように制御
                  setLogs(prev => {
                      const last = prev[0];
                      if (last && last.msg.includes(coin)) return prev;
@@ -192,7 +187,6 @@ export default function TradingTerminal() {
             }
           }
 
-          // ■ システムログ
           if (data.type === "LOG") {
              const payload = data.payload;
              addLog(payload.msg, payload.type === 'error' ? 'text-red-500' : 'text-zinc-400');
@@ -204,12 +198,21 @@ export default function TradingTerminal() {
       ws.onclose = () => {
         setIsConnected(false);
         clearInterval(pingInterval);
-        setTimeout(connect, 3000);
+        reconnectTimeout = setTimeout(connect, 3000);
+      };
+      
+      ws.onerror = (err) => {
+        console.error('WS Error:', err);
+        ws.close();
       };
     };
 
     connect();
-    return () => { if (ws) ws.close(); clearInterval(pingInterval); };
+    return () => { 
+        if (wsRef.current) wsRef.current.close(); 
+        clearInterval(pingInterval);
+        clearTimeout(reconnectTimeout);
+    };
   }, []);
 
   const addLog = (msg: string, color: string = "text-zinc-400") => {
@@ -226,7 +229,6 @@ export default function TradingTerminal() {
 
   const sendOrder = (side: 'buy' | 'sell') => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-    // 手動発注はTRADINGチャンネル経由
     wsRef.current.send(JSON.stringify({ type: "ORDER", coin: ticker, side: side, size: orderSize }));
     addLog(`MANUAL ORDER SENT: ${side.toUpperCase()} ${ticker}`, "text-white");
   };
@@ -239,14 +241,12 @@ export default function TradingTerminal() {
     setTape(prev => [{
       p: price, 
       s: size, 
-      // ▼▼▼ 修正: ここに "as 'buy' | 'sell'" を追加して型を強制します ▼▼▼
       side: (isBuy ? 'buy' : 'sell') as 'buy' | 'sell', 
       time: new Date().toLocaleTimeString().slice(0, 8)
     }, ...prev].slice(0, 30));
   };
 
-  // UI Components helpers
-  const maxVol = 5000; // 擬似板の最大ボリューム目安
+  const maxVol = 5000;
 
   return (
     <div className="fixed inset-0 bg-black text-white font-mono flex flex-col overflow-hidden selection:bg-cyan-500/30">

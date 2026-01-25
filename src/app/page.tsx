@@ -6,15 +6,16 @@ import {
   Activity, Code, Shield, Globe, Cpu, ArrowRight, 
   Terminal, LayoutGrid, Lock, Zap
 } from 'lucide-react';
-// import { sfx } from '@/lib/audio'; 
 
 export default function NexusPortal() {
   const [mounted, setMounted] = useState(false);
   
   useEffect(() => {
     setMounted(true);
-    // sfx.playSFX('startup'); 
   }, []);
+
+  // ■ あなたのRenderのURL (開発環境)
+  const RENDER_DEV_URL = "https://laru-control-panellaru-core-nexus-alaru.onrender.com";
 
   const projects = [
     { 
@@ -70,11 +71,8 @@ export default function NexusPortal() {
       
       {/* --- BACKGROUND EFFECTS --- */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        {/* Grid */}
         <div className="absolute inset-0 bg-[linear-gradient(rgba(30,30,30,0.5)_1px,transparent_1px),linear-gradient(90deg,rgba(30,30,30,0.5)_1px,transparent_1px)] bg-[size:40px_40px] opacity-20" />
-        {/* Scanline */}
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-cyan-500/5 to-transparent h-[10px] w-full animate-scanline" />
-        {/* Vignette */}
         <div className="absolute inset-0 bg-radial-gradient(circle_at_center,transparent_0%,black_100%)" />
       </div>
 
@@ -84,18 +82,14 @@ export default function NexusPortal() {
         {/* HEADER */}
         <div className="flex flex-col items-center gap-4">
            <div className="relative flex items-center gap-3 mb-1">
-             {/* Glowing Background for Icon */}
              <div className="absolute inset-0 bg-cyan-500/20 blur-xl rounded-full" />
-             
              <div className="relative p-2 md:p-3 bg-black/80 border border-cyan-500/50 rounded-full shadow-[0_0_15px_rgba(6,182,212,0.4)]">
                <Cpu size={24} className="text-cyan-400 md:w-8 md:h-8" />
              </div>
-             
              <h1 className="text-3xl md:text-6xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white via-cyan-100 to-zinc-500 drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]">
                LARU_NEXUS
              </h1>
            </div>
-           
            <div className="flex flex-col items-center gap-1">
              <div className="h-px w-32 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
              <p className="text-zinc-500 text-[10px] md:text-sm tracking-[0.3em] font-bold text-center uppercase">
@@ -107,11 +101,9 @@ export default function NexusPortal() {
         {/* --- DIVISION SELECTOR --- */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 w-full">
           
-          {/* 1. TRADING DIVISION */}
+          {/* 1. TRADING DIVISION (Local) */}
           <Link href="/trading" className="group relative block transition-all duration-300 active:scale-[0.99]">
-            {/* Hover Glow */}
             <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-500/10 to-emerald-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-xl" />
-            
             <div className="relative h-full bg-zinc-900/30 backdrop-blur-md border border-zinc-800 hover:border-emerald-500/50 rounded-xl p-6 md:p-8 flex flex-col justify-between transition-all duration-300 shadow-lg group-hover:shadow-[0_0_30px_rgba(16,185,129,0.1)]">
                <div>
                  <div className="flex justify-between items-start mb-6">
@@ -142,7 +134,7 @@ export default function NexusPortal() {
             </div>
           </Link>
 
-          {/* 2. R&D DIVISION */}
+          {/* 2. R&D DIVISION (Cloud/Render) */}
           <div className="flex flex-col h-full gap-4">
              <div className="bg-zinc-900/30 backdrop-blur-md border border-zinc-800 rounded-xl p-5 md:p-6 flex flex-col gap-4 flex-1">
                 <div className="flex items-center justify-between mb-2">
@@ -168,19 +160,19 @@ export default function NexusPortal() {
                   ))}
                 </div>
                 
-                <Link href="/dev" className="mt-auto w-full pt-2">
+                {/* ★ここを修正しました: Renderへの外部リンクに変更 */}
+                <a href={RENDER_DEV_URL} target="_blank" rel="noopener noreferrer" className="mt-auto w-full pt-2">
                   <button className="group w-full py-3 bg-gradient-to-r from-zinc-900 to-zinc-800 hover:from-zinc-800 hover:to-zinc-700 border border-zinc-700 rounded-lg text-[10px] md:text-xs font-bold text-zinc-300 flex items-center justify-center gap-2 transition-all active:scale-[0.99] shadow-lg">
                     <Lock size={12} className="group-hover:hidden"/>
                     <Zap size={12} className="hidden group-hover:block text-yellow-400"/>
-                    ACCESS DEV CONSOLE
+                    ACCESS DEV CONSOLE (CLOUD)
                   </button>
-                </Link>
+                </a>
              </div>
           </div>
 
         </div>
 
-        {/* FOOTER */}
         <div className="flex flex-col md:flex-row justify-between items-center text-[9px] md:text-[10px] text-zinc-600 font-mono border-t border-white/5 pt-6 w-full gap-2">
            <div className="flex items-center gap-2">
              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
@@ -194,10 +186,8 @@ export default function NexusPortal() {
              </span>
            </div>
         </div>
-
       </div>
       
-      {/* Global CSS for animations */}
       <style jsx global>{`
         @keyframes scanline {
           0% { transform: translateY(-100%); }

@@ -6,11 +6,14 @@ import {
   ArrowLeft, Terminal, Send, Cpu, Github, 
   Code, Loader2, ShieldCheck, AlertCircle, ImageIcon 
 } from 'lucide-react';
-// import { sfx } from '@/lib/audio'; 
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL 
-  ? `${process.env.NEXT_PUBLIC_WS_URL}/DEV`
-  : "wss://laru-brain.onrender.com/ws/DEV";
+// 【修正】接続先を自動判定（Render上でもローカルでも動くようにする）
+const getWebSocketUrl = () => {
+  if (typeof window === 'undefined') return ''; // サーバー側では空文字
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  // 自分のURL（ホスト）を取得して接続先を作る
+  return `${protocol}//${window.location.host}/ws/DEV`;
+};
 
 type Message = {
   role: 'user' | 'ai' | 'system';
@@ -38,8 +41,15 @@ export default function DevConsole() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    // クライアント側でのみ実行
+    const wsUrl = getWebSocketUrl();
+    if (!wsUrl) return;
+
+    let reconnectTimeout: NodeJS.Timeout;
+
     const connect = () => {
-      const ws = new WebSocket(WS_URL);
+      console.log('Connecting to:', wsUrl);
+      const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -48,28 +58,43 @@ export default function DevConsole() {
       };
 
       ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === 'LOG' && data.payload) {
-          const { msg, type } = data.payload;
-          if (type === 'gemini') {
-            setIsTyping(false);
-            addMessage('ai', msg);
-          } else if (type === 'error') {
-            addMessage('system', `ERROR: ${msg}`);
-          } else if (type === 'thinking') {
-             setIsTyping(true);
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'LOG' && data.payload) {
+            const { msg, type } = data.payload;
+            if (type === 'gemini') {
+              setIsTyping(false);
+              addMessage('ai', msg);
+            } else if (type === 'error') {
+              addMessage('system', `ERROR: ${msg}`);
+            } else if (type === 'thinking') {
+               setIsTyping(true);
+            }
           }
+        } catch (e) {
+          console.error('Message parse error:', e);
         }
       };
 
       ws.onclose = () => {
         setIsConnected(false);
-        setTimeout(connect, 3000);
+        // 3秒後に再接続
+        reconnectTimeout = setTimeout(connect, 3000);
+      };
+      
+      ws.onerror = (err) => {
+        console.error('WebSocket Error:', err);
+        ws.close();
       };
     };
 
     connect();
-    return () => { wsRef.current?.close(); };
+    
+    // クリーンアップ
+    return () => { 
+      clearTimeout(reconnectTimeout);
+      wsRef.current?.close(); 
+    };
   }, []);
 
   useEffect(() => {
