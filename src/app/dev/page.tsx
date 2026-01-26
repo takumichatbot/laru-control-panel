@@ -4,14 +4,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { 
   ArrowLeft, Terminal, Send, Cpu, Github, 
-  Code, Loader2, ShieldCheck, AlertCircle, ImageIcon 
+  Loader2, ShieldCheck, AlertCircle, ImageIcon 
 } from 'lucide-react';
 
-// 【修正】接続先を自動判定（Render上でもローカルでも動くようにする）
+// 接続先を自動判定
 const getWebSocketUrl = () => {
-  if (typeof window === 'undefined') return ''; // サーバー側では空文字
+  if (typeof window === 'undefined') return '';
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  // 自分のURL（ホスト）を取得して接続先を作る
   return `${protocol}//${window.location.host}/ws/DEV`;
 };
 
@@ -41,7 +40,6 @@ export default function DevConsole() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // クライアント側でのみ実行
     const wsUrl = getWebSocketUrl();
     if (!wsUrl) return;
 
@@ -78,7 +76,6 @@ export default function DevConsole() {
 
       ws.onclose = () => {
         setIsConnected(false);
-        // 3秒後に再接続
         reconnectTimeout = setTimeout(connect, 3000);
       };
       
@@ -89,16 +86,17 @@ export default function DevConsole() {
     };
 
     connect();
-    
-    // クリーンアップ
     return () => { 
       clearTimeout(reconnectTimeout);
       wsRef.current?.close(); 
     };
   }, []);
 
+  // メッセージ追加時やタイピング時にスクロール
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages, isTyping]);
 
   const addMessage = (role: Message['role'], text: string, image?: string) => {
@@ -138,24 +136,32 @@ export default function DevConsole() {
   };
 
   return (
-    <div className="h-[100dvh] bg-zinc-950 text-zinc-300 font-mono flex flex-col md:flex-row overflow-hidden selection:bg-purple-500/30">
+    // 【修正】スマホでのスクロール問題対策: h-[100dvh] で固定し、flexレイアウトで内部スクロールさせる
+    <div className="fixed inset-0 h-[100dvh] w-full bg-zinc-950 text-zinc-300 font-mono flex flex-col md:flex-row overflow-hidden selection:bg-purple-500/30">
       
-      {/* SIDEBAR */}
-      <div className="w-full md:w-64 bg-black border-r border-zinc-800 flex flex-col shrink-0">
-        <div className="h-14 border-b border-zinc-800 flex items-center px-4 gap-3 bg-zinc-900/50">
-          <Link href="/" className="text-zinc-500 hover:text-white transition-colors">
+      {/* SIDEBAR: PCでは左側、スマホでは上部にコンパクト表示 */}
+      <div className="w-full md:w-64 bg-black border-b md:border-b-0 md:border-r border-zinc-800 flex flex-col shrink-0 transition-all duration-300">
+        {/* Header (Logo & Back) */}
+        <div className="h-12 md:h-14 flex items-center px-4 gap-3 bg-zinc-900/50 shrink-0">
+          <Link href="/" className="text-zinc-500 hover:text-white transition-colors p-1">
             <ArrowLeft size={18} />
           </Link>
-          <div className="font-bold text-sm tracking-wider text-purple-400">DEV_CONSOLE</div>
+          <div className="font-bold text-sm tracking-wider text-purple-400 truncate">DEV_CONSOLE</div>
+          
+          {/* Mobile Status Indicator (Shown in header on mobile) */}
+          <div className="md:hidden ml-auto flex items-center gap-2 text-[10px]">
+             <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-red-500'}`}/>
+          </div>
         </div>
         
-        <div className="p-3 flex flex-col gap-2 overflow-y-auto flex-1">
-           <div className="text-[10px] font-bold text-zinc-600 px-2 mb-1">TARGET REPOSITORY</div>
+        {/* Repo List: スマホでは横スクロール、PCでは縦スクロール */}
+        <div className="p-2 md:p-3 flex md:flex-col gap-2 overflow-x-auto md:overflow-y-auto md:flex-1 scrollbar-hide md:scrollbar-thin">
+           <div className="hidden md:block text-[10px] font-bold text-zinc-600 px-2 mb-1">TARGET REPOSITORY</div>
            {REPOS.map(repo => (
              <button
                key={repo.id}
                onClick={() => setActiveRepo(repo.id)}
-               className={`text-left p-3 rounded-lg border transition-all group relative overflow-hidden ${
+               className={`flex-shrink-0 text-left p-2 md:p-3 rounded-lg border transition-all group relative overflow-hidden min-w-[140px] md:min-w-0 ${
                  activeRepo === repo.id 
                    ? 'bg-purple-900/10 border-purple-500/40 text-purple-200' 
                    : 'bg-zinc-900/30 border-zinc-800 text-zinc-500 hover:bg-zinc-900'
@@ -163,15 +169,16 @@ export default function DevConsole() {
              >
                 <div className="flex items-center gap-2 mb-1 relative z-10">
                    <Github size={14} />
-                   <span className="font-bold text-xs">{repo.name}</span>
+                   <span className="font-bold text-xs truncate">{repo.name}</span>
                 </div>
-                <div className="text-[10px] opacity-70 relative z-10">{repo.desc}</div>
+                <div className="text-[10px] opacity-70 relative z-10 truncate">{repo.desc}</div>
                 {activeRepo === repo.id && <div className="absolute inset-0 bg-purple-500/5 animate-pulse z-0"/>}
              </button>
            ))}
         </div>
         
-        <div className="p-4 border-t border-zinc-800 bg-zinc-900/20">
+        {/* PC Only Footer Status */}
+        <div className="hidden md:block p-4 border-t border-zinc-800 bg-zinc-900/20 mt-auto">
            <div className="flex items-center gap-2 text-[10px]">
              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-red-500'}`}/>
              <span>{isConnected ? 'SYSTEM ONLINE' : 'DISCONNECTED'}</span>
@@ -180,23 +187,25 @@ export default function DevConsole() {
       </div>
 
       {/* CHAT AREA */}
-      <div className="flex-1 flex flex-col min-w-0 bg-zinc-950 relative">
-        <div className="h-14 border-b border-zinc-800 flex items-center justify-between px-6 bg-zinc-900/50 backdrop-blur shrink-0 z-10">
-           <div className="flex items-center gap-3">
-              <Terminal size={18} className="text-purple-500"/>
-              <span className="font-bold text-sm">
+      <div className="flex-1 flex flex-col min-w-0 bg-zinc-950 relative overflow-hidden">
+        {/* Chat Header */}
+        <div className="h-10 md:h-14 border-b border-zinc-800 flex items-center justify-between px-4 md:px-6 bg-zinc-900/50 backdrop-blur shrink-0 z-10">
+           <div className="flex items-center gap-3 overflow-hidden">
+              <Terminal size={16} className="text-purple-500 shrink-0"/>
+              <span className="font-bold text-xs md:text-sm truncate">
                 Target: <span className="text-white">{activeRepo.toUpperCase()}</span>
               </span>
            </div>
-           <div className="flex items-center gap-2 text-[10px] text-zinc-500 bg-black/40 px-3 py-1 rounded-full border border-zinc-800">
+           <div className="flex items-center gap-2 text-[10px] text-zinc-500 bg-black/40 px-3 py-1 rounded-full border border-zinc-800 shrink-0">
               <ShieldCheck size={12} className="text-emerald-500"/>
-              WRITE_ACCESS
+              <span className="hidden md:inline">WRITE_ACCESS</span>
            </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 scrollbar-thin scrollbar-thumb-zinc-800">
+        {/* Messages: ここがスクロール領域 */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-zinc-800 overscroll-contain">
            {messages.length === 0 && (
-             <div className="flex flex-col items-center justify-center h-full text-zinc-700 gap-4 opacity-50">
+             <div className="flex flex-col items-center justify-center h-full text-zinc-700 gap-4 opacity-50 pb-20">
                <Cpu size={48} />
                <p className="text-xs text-center">AWAITING INSTRUCTIONS...</p>
              </div>
@@ -214,8 +223,8 @@ export default function DevConsole() {
                     <span>{m.role === 'user' ? 'YOU' : 'GOD_AI'}</span>
                     <span>{m.time}</span>
                   </div>
-                  {m.image && <img src={m.image} alt="Upload" className="rounded border border-zinc-700 max-w-xs mb-2" />}
-                  <div className={`p-3 rounded text-xs md:text-sm font-mono whitespace-pre-wrap leading-relaxed ${
+                  {m.image && <img src={m.image} alt="Upload" className="rounded border border-zinc-700 max-w-xs mb-2 w-full" />}
+                  <div className={`p-3 rounded text-xs md:text-sm font-mono whitespace-pre-wrap leading-relaxed break-words ${
                     m.role === 'user' 
                       ? 'bg-zinc-800 text-white border border-zinc-700' 
                       : (m.role === 'ai' ? 'bg-purple-950/10 text-purple-100 border border-purple-500/20' : 'bg-red-900/10 text-red-300 border-red-900/30')
@@ -226,12 +235,13 @@ export default function DevConsole() {
              </div>
            ))}
            {isTyping && <div className="text-xs text-purple-400 animate-pulse ml-12">Generating response...</div>}
-           <div ref={messagesEndRef} />
+           <div ref={messagesEndRef} className="h-1" />
         </div>
 
-        <div className="p-4 bg-black border-t border-zinc-800 shrink-0">
+        {/* Input Area */}
+        <div className="p-3 md:p-4 bg-black border-t border-zinc-800 shrink-0 pb-safe">
            <div className="flex gap-2 max-w-4xl mx-auto">
-              <button onClick={() => fileInputRef.current?.click()} className="p-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-zinc-400 transition-colors">
+              <button onClick={() => fileInputRef.current?.click()} className="p-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-zinc-400 transition-colors shrink-0">
                 <ImageIcon size={20} />
               </button>
               <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
@@ -242,7 +252,7 @@ export default function DevConsole() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-                  placeholder={`Command to ${activeRepo}...`}
+                  placeholder="Command..."
                   className="w-full bg-zinc-900 border border-zinc-800 text-white pl-4 pr-12 py-3 rounded-lg focus:outline-none focus:border-purple-500/50 font-mono text-sm"
                   disabled={!isConnected}
                 />
@@ -253,6 +263,13 @@ export default function DevConsole() {
            </div>
         </div>
       </div>
+      
+      {/* Utility Styles for scrollbar hiding/padding */}
+      <style jsx>{`
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
+      `}</style>
     </div>
   );
 }
