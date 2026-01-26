@@ -306,17 +306,41 @@ init_db()
 # --- Server Setup & 404 Fix ---
 app = FastAPI()
 
+
 # ★重要: Next.jsの静的ファイル配信設定（404エラー対策）
-# フロントエンドがビルドされた 'out' フォルダがある場合、そこをルートとして配信する
-if os.path.exists("out"):
-    # _next フォルダ（JS, CSSチャンク）
-    app.mount("/_next", StaticFiles(directory="out/_next"), name="next")
-    # ルートフォルダ（index.html, faviconなど）
-    app.mount("/", StaticFiles(directory="out", html=True), name="static")
+# WebSocketより先に定義すると全て乗っ取られるため、API定義の後に配置します
 
 @app.get("/api/status")
 def root():
     return {"status": "ok", "service": "LaruNexus GENESIS", "mode": "DEV_ADMIN", "time": datetime.now().isoformat()}
+
+# WebSocketエンドポイントを先に定義
+@app.websocket("/ws/{channel_id}")
+async def websocket_endpoint(websocket: WebSocket, channel_id: str):
+    await manager.connect(websocket)
+    try:
+        await websocket.send_json({"type": "HISTORY_SYNC", "data": get_channel_logs(channel_id), "channelId": channel_id})
+        while True:
+            data = await websocket.receive_text()
+            payload = json.loads(data)
+            
+            if payload.get("type") == "REALTIME_INPUT":
+                img = payload.get("image")
+                txt = payload.get("text", "Analyze this")
+                await manager.broadcast({"type": "LOG", "channelId": channel_id, "payload": {"msg": "👁️ Vision Processing...", "type": "thinking"}})
+                chat = model.start_chat(history=[])
+                res = await asyncio.to_thread(chat.send_message, [txt, {"mime_type": "image/jpeg", "data": img}])
+                await manager.broadcast({"type": "LOG", "channelId": channel_id, "payload": {"msg": res.text, "type": "gemini"}})
+            
+            elif payload.get("command"):
+                asyncio.create_task(process_command(payload.get("command"), channel_id))
+    except: manager.disconnect(websocket)
+
+# ★静的ファイル配信は「最後」に定義する（これがWebSocketを邪魔しないコツです）
+if os.path.exists("out"):
+    app.mount("/_next", StaticFiles(directory="out/_next"), name="next")
+    # ルートへのマウントは一番最後！
+    app.mount("/", StaticFiles(directory="out", html=True), name="static")
 
 ORIGINS = os.getenv("FRONTEND_URL", "*").split(",")
 app.add_middleware(CORSMiddleware, allow_origins=ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -610,28 +634,6 @@ model = genai.GenerativeModel(
         browser_navigate, browser_screenshot, browser_click, browser_type, browser_scroll
     ]
 )
-
-@app.websocket("/ws/{channel_id}")
-async def websocket_endpoint(websocket: WebSocket, channel_id: str):
-    await manager.connect(websocket)
-    try:
-        await websocket.send_json({"type": "HISTORY_SYNC", "data": get_channel_logs(channel_id), "channelId": channel_id})
-        while True:
-            data = await websocket.receive_text()
-            payload = json.loads(data)
-            
-            if payload.get("type") == "REALTIME_INPUT":
-                # Vision Analysis (画像認識)
-                img = payload.get("image")
-                txt = payload.get("text", "Analyze this")
-                await manager.broadcast({"type": "LOG", "channelId": channel_id, "payload": {"msg": "👁️ Vision Processing...", "type": "thinking"}})
-                chat = model.start_chat(history=[])
-                res = await asyncio.to_thread(chat.send_message, [txt, {"mime_type": "image/jpeg", "data": img}])
-                await manager.broadcast({"type": "LOG", "channelId": channel_id, "payload": {"msg": res.text, "type": "gemini"}})
-            
-            elif payload.get("command"):
-                asyncio.create_task(process_command(payload.get("command"), channel_id))
-    except: manager.disconnect(websocket)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
