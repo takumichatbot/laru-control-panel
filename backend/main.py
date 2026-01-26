@@ -3,7 +3,6 @@ import json
 import base64
 import os
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
-import random
 import re
 import sqlite3
 import subprocess
@@ -17,9 +16,9 @@ from contextlib import asynccontextmanager
 # FastAPI関連
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles  # 【追加】404エラー対策
+from fastapi.staticfiles import StaticFiles
 
-# AI & Browser
+# AI & Browser & Network
 import google.generativeai as genai
 from playwright.async_api import async_playwright
 import httpx
@@ -50,8 +49,10 @@ async def commit_github_fix(target_repo: str, file_path: str, new_content: str, 
     if not GITHUB_TOKEN:
         return "エラー: GitHubトークンが設定されていません。"
 
+    # リポジトリ名の揺らぎ吸収
     repo_info = REPO_REGISTRY.get(target_repo.lower())
     if not repo_info:
+        # 登録外でも柔軟に対応
         repo_info = {"owner": "takumichatbot", "name": target_repo}
 
     owner = repo_info["owner"]
@@ -64,10 +65,11 @@ async def commit_github_fix(target_repo: str, file_path: str, new_content: str, 
 
     async with httpx.AsyncClient() as client:
         try:
-            # 現在のファイルのSHAを取得 (上書きに必要)
+            # 1. 現在のファイルのSHAを取得 (上書きに必要)
             res = await client.get(url, headers=headers)
             sha = res.json().get("sha") if res.status_code == 200 else None
             
+            # 2. 更新実行
             data = {
                 "message": commit_message,
                 "content": base64.b64encode(new_content.encode()).decode(),
@@ -109,9 +111,10 @@ async def read_github_content(target_repo: str, file_path: str):
         async with httpx.AsyncClient() as client:
             return await client.get(url, headers=headers)
 
+    # 1回目トライ
     res = await fetch(file_path)
     
-    # 2回目トライ (backend/ をつけてみる)
+    # 2回目トライ (backend/ をつけてみる - 構成違い対策)
     if res.status_code == 404 and not file_path.startswith("backend/"):
         res = await fetch(f"backend/{file_path}")
 
@@ -123,7 +126,7 @@ async def read_github_content(target_repo: str, file_path: str):
 
 async def fetch_repo_structure(target_repo: str):
     """
-    リポジトリの全ファイルパス一覧を取得
+    リポジトリの全ファイルパス一覧を取得（地図作成）
     """
     if not GITHUB_TOKEN: return "Error: No Token"
     
@@ -145,7 +148,7 @@ async def fetch_repo_structure(target_repo: str):
             if res.status_code == 200:
                 data = res.json()
                 paths = [item['path'] for item in data.get('tree', []) if item['type'] == 'blob']
-                return json.dumps(paths[:100]) 
+                return json.dumps(paths[:100]) # 多すぎるとAIがパンクするので間引く
             else:
                 return f"GitHub API Error ({res.status_code}): {res.text}"
         except Exception as e:
@@ -153,7 +156,7 @@ async def fetch_repo_structure(target_repo: str):
 
 async def search_codebase(target_repo: str, query: str):
     """
-    リポジトリ内Grep検索
+    リポジトリ内Grep検索（コード捜索）
     """
     if not GITHUB_TOKEN: return "Error: No Token"
     
@@ -182,7 +185,7 @@ async def search_codebase(target_repo: str, query: str):
         except Exception as e:
             return f"Network Error: {str(e)}"
 
-# --- Render API ---
+# --- Render API Integration ---
 RENDER_API_KEY = os.getenv("RENDER_API_KEY")
 
 async def check_render_status():
@@ -203,6 +206,7 @@ async def check_render_status():
                 status = svc['service']['serviceDetails'].get('status', 'unknown')
                 url = svc['service']['serviceDetails'].get('url', 'no-url')
                 
+                # 最新デプロイ情報
                 deploys_res = await client.get(f"https://api.render.com/v1/services/{svc_id}/deploys?limit=1", headers=headers)
                 deploy_info = "No deploy info"
                 if deploys_res.status_code == 200 and len(deploys_res.json()) > 0:
@@ -214,14 +218,15 @@ async def check_render_status():
         except Exception as e:
             return f"Render Monitor Error: {str(e)}"
 
-# --- Discord Notification ---
+# --- Discord Notification System ---
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 
 async def send_discord_alert(title: str, description: str, color: int = 0x00ff00):
-    """Discord通知送信"""
+    """Discordへのリッチな通知"""
     if not DISCORD_WEBHOOK_URL: return
     payload = {
         "username": "LaruNexus AI",
+        "avatar_url": "https://cdn-icons-png.flaticon.com/512/4712/4712009.png",
         "embeds": [{"title": title, "description": description, "color": color, "footer": {"text": "Genesis System"}}]
     }
     try:
@@ -229,16 +234,16 @@ async def send_discord_alert(title: str, description: str, color: int = 0x00ff00
             await client.post(DISCORD_WEBHOOK_URL, json=payload)
     except: pass
 
-# --- Database ---
+# --- Database: Memory & KPI ---
 DB_PATH = "/opt/render/project/src/nexus_genesis.db" if os.getenv("RENDER") else "nexus_genesis.db"
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    # ログテーブル
+    # ログテーブル（記憶）
     c.execute('''CREATE TABLE IF NOT EXISTS logs
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, channel_id TEXT, timestamp TEXT, msg TEXT, type TEXT, image_url TEXT)''')
-    # KPIテーブル
+    # KPIテーブル（人事評価）
     c.execute('''CREATE TABLE IF NOT EXISTS kpi_scores
                  (dept TEXT PRIMARY KEY, score INTEGER, streak INTEGER, last_eval TEXT)''')
     
@@ -249,6 +254,7 @@ def init_db():
     conn.close()
 
 def update_kpi(dept: str, points: int, reason: str):
+    """KPIスコア更新"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -301,6 +307,7 @@ init_db()
 app = FastAPI()
 
 # ★重要: Next.jsの静的ファイル配信設定（404エラー対策）
+# フロントエンドがビルドされた 'out' フォルダがある場合、そこをルートとして配信する
 if os.path.exists("out"):
     # _next フォルダ（JS, CSSチャンク）
     app.mount("/_next", StaticFiles(directory="out/_next"), name="next")
@@ -309,7 +316,7 @@ if os.path.exists("out"):
 
 @app.get("/api/status")
 def root():
-    return {"status": "ok", "service": "LaruNexus GENESIS", "mode": "DEV_ADMIN_ONLY", "time": datetime.now().isoformat()}
+    return {"status": "ok", "service": "LaruNexus GENESIS", "mode": "DEV_ADMIN", "time": datetime.now().isoformat()}
 
 ORIGINS = os.getenv("FRONTEND_URL", "*").split(",")
 app.add_middleware(CORSMiddleware, allow_origins=ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -333,7 +340,7 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# --- Browser Agent (Phantom Browser) ---
+# --- Phantom Browser (自律型ブラウザエージェント) ---
 class GlobalBrowser:
     def __init__(self):
         self.playwright = None
@@ -348,6 +355,7 @@ class GlobalBrowser:
                 headless=True,
                 args=['--no-sandbox', '--disable-setuid-sandbox']
             )
+            # 人間らしく見せる設定
             context = await self.browser.new_context(
                 user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 viewport={"width": 1280, "height": 720}
@@ -381,6 +389,7 @@ async def browser_screenshot():
         try:
             screenshot_bytes = await phantom_browser.page.screenshot(type='jpeg', quality=60)
             img_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
+            # 開発コンソールに画像を送信
             await manager.broadcast({
                 "type": "LOG", "channelId": "DEV", 
                 "payload": {"msg": "📸 Screen Capture", "type": "browser", "imageUrl": f"data:image/jpeg;base64,{img_b64}"}
@@ -416,6 +425,7 @@ async def browser_scroll(direction: str):
         except Exception as e: return f"Scroll Error: {e}"
 
 async def run_autonomous_browser_agent(url: str, task_description: str, channel_id: str):
+    """URLを指定してブラウザエージェントを派遣する"""
     await manager.broadcast({"type": "LOG", "channelId": channel_id, "payload": {"msg": f"🌐 潜入開始: {url}", "type": "thinking"}})
     try:
         await browser_navigate(url)
@@ -429,6 +439,7 @@ async def run_autonomous_browser_agent(url: str, task_description: str, channel_
 
 # --- Terminal & System Tools ---
 async def run_terminal_command(command: str):
+    """安全な範囲でシェルコマンドを実行"""
     forbidden = ["rm -rf /", "shutdown", "reboot", ":(){ :|:& };:"]
     if any(f in command for f in forbidden): return "Error: Security Block."
     print(f"💻 Shell: {command}")
@@ -440,6 +451,7 @@ async def run_terminal_command(command: str):
     except Exception as e: return f"Shell Error: {e}"
 
 async def run_test_validation(target_file: str, test_code: str):
+    """修正したコードが動くかテストする"""
     test_filename = "temp_validation.py"
     with open(test_filename, "w") as f: f.write(test_code)
     result = await run_terminal_command(f"python {test_filename}")
@@ -447,6 +459,7 @@ async def run_test_validation(target_file: str, test_code: str):
     return f"Test Result:\n{result}"
 
 async def system_pulse():
+    """サーバーの心拍数（CPU/メモリ）をフロントに送る"""
     while True:
         if manager.active_connections:
             cpu = psutil.cpu_percent(interval=None)
@@ -455,6 +468,7 @@ async def system_pulse():
         await asyncio.sleep(2)
 
 async def immune_system_loop():
+    """自己修復免疫システム"""
     print("🛡️ IMMUNE SYSTEM: ACTIVE")
     last_check_id = 0
     while True:
@@ -462,15 +476,21 @@ async def immune_system_loop():
             await asyncio.sleep(10)
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
+            # 最新のエラーログを取得
             c.execute("SELECT id, msg FROM logs WHERE type='error' AND id > ? ORDER BY id ASC LIMIT 1", (last_check_id,))
             row = c.fetchone()
             conn.close()
             if row:
                 last_check_id, err_msg = row
-                print(f"🚑 Auto-Healing: {err_msg[:30]}...")
-                # 自動修復ロジック（簡易版）
-                prompt = f"エラーが発生しました: {err_msg}。原因を推測し、`read_github_content` 等を使って調査してください。"
-                await asyncio.to_thread(model.generate_content, prompt)
+                print(f"🚑 Auto-Healing Triggered: {err_msg[:30]}...")
+                
+                # 自動修復ロジック
+                # ここでAIに「エラー内容」を渡し、原因究明させる
+                prompt = f"システムエラーが発生しました: {err_msg}。あなたは自己修復エージェントです。`read_github_content` 等を使って原因を調査し、可能なら `commit_github_fix` で修正してください。"
+                
+                # AI呼び出し（結果はログへ）
+                # ※無限ループ防止のため、ここでは実行指示のみログに出すか、慎重に実行する
+                await manager.broadcast({"type": "LOG", "channelId": "DEV", "payload": {"msg": f"🚑 自己修復プロセスを開始: {err_msg}", "type": "thinking"}})
         except: pass
 
 # --- AI Personas & Logic ---
@@ -493,6 +513,7 @@ DEPT_PERSONAS = {
 }
 
 async def determine_target_department(command: str):
+    """最適な部署をAIが決める"""
     prompt = f"指示: {command}\n適切な部署を選んでください: DEV (開発), INFRA (インフラ), CENTRAL (その他)。回答は部署名のみ。"
     try:
         res = await asyncio.to_thread(model.generate_content, prompt)
@@ -501,6 +522,7 @@ async def determine_target_department(command: str):
     except: return "CENTRAL"
 
 async def run_strategic_council(topic: str, requester: str):
+    """戦略会議モード"""
     await manager.broadcast({"type": "LOG", "channelId": requester, "payload": {"msg": f"🏛️ 戦略会議: {topic}", "type": "thinking"}})
     opinions = []
     for dept in ["DEV", "INFRA"]:
@@ -513,6 +535,7 @@ async def run_strategic_council(topic: str, requester: str):
     await manager.broadcast({"type": "LOG", "channelId": requester, "payload": {"msg": f"⚖️ **結論**\n{summary.text}", "type": "sys"}})
 
 async def process_command(command: str, current_channel: str):
+    """メインの指令処理プロセス"""
     await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"Cmd: {command}", "type": "user"}})
     
     if "会議" in command:
@@ -543,7 +566,7 @@ async def process_command(command: str, current_channel: str):
     try:
         response = await asyncio.to_thread(chat.send_message, command)
         
-        # Tool Use Loop
+        # Tool Use Loop (最大5回連続使用可能)
         for _ in range(5):
             part = response.parts[0]
             if hasattr(part, 'function_call') and part.function_call:
@@ -598,7 +621,7 @@ async def websocket_endpoint(websocket: WebSocket, channel_id: str):
             payload = json.loads(data)
             
             if payload.get("type") == "REALTIME_INPUT":
-                # Vision Analysis
+                # Vision Analysis (画像認識)
                 img = payload.get("image")
                 txt = payload.get("text", "Analyze this")
                 await manager.broadcast({"type": "LOG", "channelId": channel_id, "payload": {"msg": "👁️ Vision Processing...", "type": "thinking"}})
@@ -612,7 +635,10 @@ async def websocket_endpoint(websocket: WebSocket, channel_id: str):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("🚀 GENESIS DEV-ONLY MODE STARTED")
+    # 起動時のロゴとタスク開始
+    print("🚀 GENESIS DEV-ADMIN MODE STARTED")
+    # ここには system_pulse と immune_system_loop だけを入れる
+    # risk_management_loop (投資) は入れない！
     asyncio.create_task(system_pulse())
     asyncio.create_task(immune_system_loop())
     yield
