@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link'; // 【修正】Linkをインポート
 import { 
   Code, Shield, Globe, Cpu, Terminal, LayoutGrid, Lock, Zap
 } from 'lucide-react';
@@ -112,7 +113,12 @@ export default function NexusPortal() {
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {projects.map((p) => (
-                  <div key={p.id} className={`group/card relative p-4 rounded-lg border transition-all cursor-pointer active:scale-[0.98] bg-black/40 ${p.border} ${p.hover}`}>
+                  // 【修正】Linkコンポーネントでラップしました。これでクリックすると /dev へ飛びます
+                  <Link 
+                    href="/dev" 
+                    key={p.id} 
+                    className={`group/card relative p-4 rounded-lg border transition-all cursor-pointer active:scale-[0.98] bg-black/40 ${p.border} ${p.hover}`}
+                  >
                      <div className="flex justify-between items-start mb-3">
                         <div className={`${p.color} opacity-80 group-hover/card:opacity-100 transition-opacity bg-white/5 p-2 rounded`}>{p.icon}</div>
                         <div className={`text-[9px] font-bold px-2 py-0.5 rounded bg-black border border-white/10 ${p.color}`}>
@@ -121,7 +127,7 @@ export default function NexusPortal() {
                      </div>
                      <div className="font-bold text-sm text-zinc-300 group-hover/card:text-white transition-colors">{p.name}</div>
                      <div className="text-[10px] text-zinc-600 font-bold mt-1 group-hover/card:text-zinc-500">{p.role}</div>
-                  </div>
+                  </Link>
                 ))}
               </div>
               
@@ -140,7 +146,7 @@ export default function NexusPortal() {
         <div className="flex flex-col md:flex-row justify-between items-center text-[9px] md:text-[10px] text-zinc-600 font-mono border-t border-white/5 pt-6 w-full gap-2">
            <div className="flex items-center gap-2">
              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-             SYSTEM_ID: GENESIS_V3.0.2
+             SYSTEM_ID: GENESIS_V3.0.3
            </div>
            <div className="flex gap-4 tracking-wider">
              <span>CPU: <span className="text-zinc-400">NORMAL</span></span>
