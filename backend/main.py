@@ -587,19 +587,23 @@ async def process_command(command: str, current_channel: str):
             history.append({"role": "model" if p['type']=='gemini' else "user", "parts": [p['msg']]})
 
     chat = model.start_chat(history=history)
+
     try:
         response = await asyncio.to_thread(chat.send_message, command)
         
         # Tool Use Loop (最大5回連続使用可能)
         for _ in range(5):
-            part = response.parts[0]
-            if hasattr(part, 'function_call') and part.function_call:
-                fc = part.function_call
+            # ★修正1: 全パートから関数呼び出しを探す（以前は先頭のみチェックしていたため見落としがあった）
+            part_with_fc = next((p for p in response.parts if p.function_call), None)
+            
+            if part_with_fc:
+                fc = part_with_fc.function_call
                 fname, args = fc.name, fc.args
                 print(f"🔧 Tool: {fname}")
                 await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"🔧 {fname}...", "type": "thinking"}})
                 
                 res = "Error"
+                # 各ツールの実行ロジック
                 if fname == "read_github_content": res = await read_github_content(args.get("target_repo"), args.get("file_path"))
                 elif fname == "commit_github_fix": res = await commit_github_fix(args.get("target_repo"), args.get("file_path"), args.get("new_content"), args.get("commit_message"))
                 elif fname == "fetch_repo_structure": res = await fetch_repo_structure(args.get("target_repo"))
@@ -617,17 +621,29 @@ async def process_command(command: str, current_channel: str):
                 if "Error" in str(res): update_kpi(current_channel, -2, fname)
                 else: update_kpi(current_channel, 5, fname)
 
+                # 結果をAIに返す
                 response = await asyncio.to_thread(chat.send_message, genai.protos.Content(
                     role='function', parts=[genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fname, response={'result': str(res)}))]))
-            else: break
+            else:
+                break
         
-        await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": response.text, "type": "gemini"}})
+        # ★修正2: 安全にテキストを取り出す（response.text は関数呼び出しが混ざるとクラッシュするため使用しない）
+        final_text_parts = []
+        for p in response.parts:
+            if not p.function_call: # 関数呼び出しでない部分（テキスト）だけを集める
+                final_text_parts.append(p.text)
+        
+        final_text = "".join(final_text_parts)
+        if not final_text: final_text = "✅ 処理が完了しました"
+
+        await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": final_text, "type": "gemini"}})
+
     except Exception as e:
         await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"Error: {e}", "type": "error"}})
-
+        
 # --- Model Init ---
 model = genai.GenerativeModel(
-    model_name='gemini-2.0-flash-exp',
+    model_name='gemini-2.0-flash',  # <--- ★ここを 'gemini-2.0-flash' に変更
     tools=[
         commit_github_fix, read_github_content, fetch_repo_structure, search_codebase,
         check_render_status, run_terminal_command, run_test_validation,
