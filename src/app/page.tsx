@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link'; // 【修正】Linkをインポート
+import Link from 'next/link';
 import { 
   Code, Shield, Globe, Cpu, Terminal, LayoutGrid, Lock, Zap
 } from 'lucide-react';
@@ -12,9 +12,6 @@ export default function NexusPortal() {
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  // ■ RenderのURL
-  const RENDER_DEV_URL = "https://laru-control-panellaru-core-nexus-alaru.onrender.com";
 
   const projects = [
     { 
@@ -113,7 +110,6 @@ export default function NexusPortal() {
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {projects.map((p) => (
-                  // 【修正】Linkコンポーネントでラップしました。これでクリックすると /dev へ飛びます
                   <Link 
                     href="/dev" 
                     key={p.id} 
@@ -132,13 +128,14 @@ export default function NexusPortal() {
               </div>
               
               <div className="pt-4 border-t border-white/5">
-                <a href={RENDER_DEV_URL} target="_blank" rel="noopener noreferrer" className="block w-full">
+                {/* 【修正】ここを外部URLではなく /dev への内部リンクに変更 */}
+                <Link href="/dev" className="block w-full">
                   <button className="group w-full py-4 bg-gradient-to-r from-purple-900/40 to-zinc-900 hover:from-purple-900/60 hover:to-zinc-800 border border-purple-500/30 rounded-lg text-xs font-bold text-purple-200 flex items-center justify-center gap-2 transition-all active:scale-[0.99] shadow-lg hover:shadow-purple-900/20">
                     <Lock size={14} className="group-hover:hidden text-purple-400"/>
                     <Zap size={14} className="hidden group-hover:block text-yellow-400"/>
                     INITIALIZE DEV CONSOLE (CLOUD CONNECTION)
                   </button>
-                </a>
+                </Link>
               </div>
            </div>
         </div>
@@ -146,7 +143,7 @@ export default function NexusPortal() {
         <div className="flex flex-col md:flex-row justify-between items-center text-[9px] md:text-[10px] text-zinc-600 font-mono border-t border-white/5 pt-6 w-full gap-2">
            <div className="flex items-center gap-2">
              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-             SYSTEM_ID: GENESIS_V3.0.3
+             SYSTEM_ID: GENESIS_V3.0.4
            </div>
            <div className="flex gap-4 tracking-wider">
              <span>CPU: <span className="text-zinc-400">NORMAL</span></span>

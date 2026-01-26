@@ -4,10 +4,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { 
   ArrowLeft, Terminal, Send, Cpu, Github, 
-  Loader2, ShieldCheck, AlertCircle, ImageIcon 
+  ShieldCheck, AlertCircle, ImageIcon 
 } from 'lucide-react';
 
-// 接続先を自動判定
 const getWebSocketUrl = () => {
   if (typeof window === 'undefined') return '';
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -92,7 +91,6 @@ export default function DevConsole() {
     };
   }, []);
 
-  // メッセージ追加時やタイピング時にスクロール
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -106,18 +104,30 @@ export default function DevConsole() {
   };
 
   const handleSend = () => {
-    if (!input.trim() || !isConnected) return;
-    const commandWithContext = `[Target Repo: ${activeRepo}] ${input}`;
+    if (!input.trim()) return;
     
-    wsRef.current?.send(JSON.stringify({ type: 'CHAT', command: commandWithContext }));
+    // UI反映
     addMessage('user', input);
-    setInput('');
     setIsTyping(true);
+
+    // WebSocket送信（接続されている場合のみ）
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        const commandWithContext = `[Target Repo: ${activeRepo}] ${input}`;
+        wsRef.current.send(JSON.stringify({ type: 'CHAT', command: commandWithContext }));
+    } else {
+        // オフライン時のダミー応答（UIテスト用）
+        setTimeout(() => {
+            setIsTyping(false);
+            addMessage('system', 'OFFLINE MODE: Server not connected. Message logged locally.');
+        }, 500);
+    }
+
+    setInput('');
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !wsRef.current) return;
+    if (!file) return;
 
     const reader = new FileReader();
     reader.onload = () => {
@@ -125,36 +135,35 @@ export default function DevConsole() {
       const base64Data = base64.split(',')[1];
       addMessage('user', 'Uploaded Screenshot Analysis Request', base64);
       setIsTyping(true);
-      wsRef.current?.send(JSON.stringify({
-        type: 'REALTIME_INPUT',
-        image: base64Data,
-        text: `[Target Repo: ${activeRepo}] Analyze this image.`
-      }));
+      
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({
+            type: 'REALTIME_INPUT',
+            image: base64Data,
+            text: `[Target Repo: ${activeRepo}] Analyze this image.`
+        }));
+      }
     };
     reader.readAsDataURL(file);
     e.target.value = '';
   };
 
   return (
-    // 【修正】スマホでのスクロール問題対策: h-[100dvh] で固定し、flexレイアウトで内部スクロールさせる
     <div className="fixed inset-0 h-[100dvh] w-full bg-zinc-950 text-zinc-300 font-mono flex flex-col md:flex-row overflow-hidden selection:bg-purple-500/30">
       
-      {/* SIDEBAR: PCでは左側、スマホでは上部にコンパクト表示 */}
-      <div className="w-full md:w-64 bg-black border-b md:border-b-0 md:border-r border-zinc-800 flex flex-col shrink-0 transition-all duration-300">
-        {/* Header (Logo & Back) */}
+      {/* SIDEBAR */}
+      <div className="w-full md:w-64 bg-black border-b md:border-b-0 md:border-r border-zinc-800 flex flex-col shrink-0 transition-all duration-300 z-30">
         <div className="h-12 md:h-14 flex items-center px-4 gap-3 bg-zinc-900/50 shrink-0">
           <Link href="/" className="text-zinc-500 hover:text-white transition-colors p-1">
             <ArrowLeft size={18} />
           </Link>
           <div className="font-bold text-sm tracking-wider text-purple-400 truncate">DEV_CONSOLE</div>
           
-          {/* Mobile Status Indicator (Shown in header on mobile) */}
           <div className="md:hidden ml-auto flex items-center gap-2 text-[10px]">
              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-red-500'}`}/>
           </div>
         </div>
         
-        {/* Repo List: スマホでは横スクロール、PCでは縦スクロール */}
         <div className="p-2 md:p-3 flex md:flex-col gap-2 overflow-x-auto md:overflow-y-auto md:flex-1 scrollbar-hide md:scrollbar-thin">
            <div className="hidden md:block text-[10px] font-bold text-zinc-600 px-2 mb-1">TARGET REPOSITORY</div>
            {REPOS.map(repo => (
@@ -177,7 +186,6 @@ export default function DevConsole() {
            ))}
         </div>
         
-        {/* PC Only Footer Status */}
         <div className="hidden md:block p-4 border-t border-zinc-800 bg-zinc-900/20 mt-auto">
            <div className="flex items-center gap-2 text-[10px]">
              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-red-500'}`}/>
@@ -188,7 +196,6 @@ export default function DevConsole() {
 
       {/* CHAT AREA */}
       <div className="flex-1 flex flex-col min-w-0 bg-zinc-950 relative overflow-hidden">
-        {/* Chat Header */}
         <div className="h-10 md:h-14 border-b border-zinc-800 flex items-center justify-between px-4 md:px-6 bg-zinc-900/50 backdrop-blur shrink-0 z-10">
            <div className="flex items-center gap-3 overflow-hidden">
               <Terminal size={16} className="text-purple-500 shrink-0"/>
@@ -202,8 +209,7 @@ export default function DevConsole() {
            </div>
         </div>
 
-        {/* Messages: ここがスクロール領域 */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-zinc-800 overscroll-contain">
+        <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-zinc-800 overscroll-contain pb-24">
            {messages.length === 0 && (
              <div className="flex flex-col items-center justify-center h-full text-zinc-700 gap-4 opacity-50 pb-20">
                <Cpu size={48} />
@@ -238,9 +244,9 @@ export default function DevConsole() {
            <div ref={messagesEndRef} className="h-1" />
         </div>
 
-        {/* Input Area */}
-        <div className="p-3 md:p-4 bg-black border-t border-zinc-800 shrink-0 pb-safe">
-           <div className="flex gap-2 max-w-4xl mx-auto">
+        {/* 【重要】Input Area: z-indexを50に設定、disabled制限を撤廃 */}
+        <div className="absolute bottom-0 left-0 right-0 p-3 md:p-4 bg-black border-t border-zinc-800 shrink-0 pb-safe z-50">
+           <div className="flex gap-2 max-w-4xl mx-auto relative z-50">
               <button onClick={() => fileInputRef.current?.click()} className="p-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-zinc-400 transition-colors shrink-0">
                 <ImageIcon size={20} />
               </button>
@@ -252,9 +258,9 @@ export default function DevConsole() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-                  placeholder="Command..."
-                  className="w-full bg-zinc-900 border border-zinc-800 text-white pl-4 pr-12 py-3 rounded-lg focus:outline-none focus:border-purple-500/50 font-mono text-sm"
-                  disabled={!isConnected}
+                  placeholder={isConnected ? "Command..." : "Offline Mode (UI Test)"}
+                  className="w-full bg-zinc-900 border border-zinc-800 text-white pl-4 pr-12 py-3 rounded-lg focus:outline-none focus:border-purple-500/50 font-mono text-sm shadow-lg"
+                  autoComplete="off"
                 />
                 <button onClick={handleSend} disabled={!input.trim()} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded transition-colors disabled:opacity-50">
                    <Send size={16} />
@@ -264,7 +270,6 @@ export default function DevConsole() {
         </div>
       </div>
       
-      {/* Utility Styles for scrollbar hiding/padding */}
       <style jsx>{`
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
