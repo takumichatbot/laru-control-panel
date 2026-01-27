@@ -300,13 +300,6 @@ init_db()
 # --- Server Setup & 404 Fix ---
 app = FastAPI()
 
-# ★重要: Next.jsの静的ファイル配信設定（404エラー対策）
-if os.path.exists("out"):
-    # _next フォルダ（JS, CSSチャンク）
-    app.mount("/_next", StaticFiles(directory="out/_next"), name="next")
-    # ルートフォルダ（index.html, faviconなど）
-    app.mount("/", StaticFiles(directory="out", html=True), name="static")
-
 @app.get("/api/status")
 def root():
     return {"status": "ok", "service": "LaruNexus GENESIS", "mode": "DEV_ADMIN_ONLY", "time": datetime.now().isoformat()}
@@ -530,10 +523,8 @@ async def process_command(command: str, current_channel: str):
         return
 
     persona = DEPT_PERSONAS.get(current_channel, DEPT_PERSONAS["CENTRAL"])
-    score, _ = get_current_kpi(current_channel)
-    mood = "慎重に" if score < 40 else "自信を持って"
     
-    history = [{"role": "user", "parts": [f"あなたは{persona['name']}。{mood}対応せよ。\n指示: {command}"]}]
+    history = [{"role": "user", "parts": [f"あなたは{persona['name']}。\n指示: {command}"]}]
     past = get_channel_logs(current_channel, 5)
     for p in past: 
         if p['type'] in ['user', 'gemini']:
@@ -543,9 +534,8 @@ async def process_command(command: str, current_channel: str):
     try:
         response = await asyncio.to_thread(chat.send_message, command)
         
-        # Tool Use Loop (最大5回)
+        # ★修正: 全パートから関数呼び出しを安全に探す
         for _ in range(5):
-            # ★修正1: 全パートから関数呼び出しを探す（以前は先頭のみチェックしていたためエラーになった）
             part_with_fc = next((p for p in response.parts if p.function_call), None)
             
             if part_with_fc:
@@ -555,6 +545,7 @@ async def process_command(command: str, current_channel: str):
                 await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"🔧 {fname}...", "type": "thinking"}})
                 
                 res = "Error"
+                # 各ツールの実行
                 if fname == "read_github_content": res = await read_github_content(args.get("target_repo"), args.get("file_path"))
                 elif fname == "commit_github_fix": res = await commit_github_fix(args.get("target_repo"), args.get("file_path"), args.get("new_content"), args.get("commit_message"))
                 elif fname == "fetch_repo_structure": res = await fetch_repo_structure(args.get("target_repo"))
@@ -568,7 +559,6 @@ async def process_command(command: str, current_channel: str):
                 elif fname == "browser_scroll": res = await browser_scroll(args.get("direction"))
                 elif fname == "run_test_validation": res = await run_test_validation(args.get("target_file"), args.get("test_code"))
 
-                # KPI Logic
                 if "Error" in str(res): update_kpi(current_channel, -2, fname)
                 else: update_kpi(current_channel, 5, fname)
 
@@ -577,23 +567,17 @@ async def process_command(command: str, current_channel: str):
             else:
                 break
         
-        # ★修正2: response.textを使わず、安全にテキスト部分だけを結合する
-        final_text_parts = []
-        for p in response.parts:
-            if not p.function_call: # 関数呼び出し以外の「テキスト」だけを集める
-                final_text_parts.append(p.text)
-        
-        final_text = "".join(final_text_parts)
-        if not final_text: final_text = "✅ 処理が完了しました"
+        # ★修正: テキスト部分だけを安全に取り出す（response.textは使わない）
+        final_text = "".join([p.text for p in response.parts if not p.function_call])
+        if not final_text: final_text = "✅ 処理完了"
 
         await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": final_text, "type": "gemini"}})
-
     except Exception as e:
         await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"Error: {e}", "type": "error"}})
-        
+                
 # --- Model Init ---
 model = genai.GenerativeModel(
-    model_name='gemini-2.0-flash-exp',
+    model_name='gemini-2.0-flash',
     tools=[
         commit_github_fix, read_github_content, fetch_repo_structure, search_codebase,
         check_render_status, run_terminal_command, run_test_validation,
@@ -632,6 +616,14 @@ async def lifespan(app: FastAPI):
     print("💤 SHUTDOWN")
 
 app.router.lifespan_context = lifespan
+
+# ★重要: Next.jsの静的ファイル配信設定（404エラー対策）
+if os.path.exists("out"):
+    # _next フォルダ（JS, CSSチャンク）
+    app.mount("/_next", StaticFiles(directory="out/_next"), name="next")
+    # ルートフォルダ（index.html, faviconなど）
+    app.mount("/", StaticFiles(directory="out", html=True), name="static")
+
 
 if __name__ == "__main__":
     import uvicorn
