@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 from datetime import datetime
 from contextlib import asynccontextmanager
-
+from pydantic import BaseModel
 # FastAPI関連
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -241,6 +241,8 @@ def init_db():
     # KPIテーブル
     c.execute('''CREATE TABLE IF NOT EXISTS kpi_scores
                  (dept TEXT PRIMARY KEY, score INTEGER, streak INTEGER, last_eval TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS project_settings
+                     (project_id TEXT PRIMARY KEY, email TEXT, password TEXT, login_type TEXT, memo TEXT)''')
     
     depts = ["CENTRAL", "DEV", "TRADING", "INFRA"]
     for d in depts:
@@ -265,6 +267,28 @@ def update_kpi(dept: str, points: int, reason: str):
     except: pass
     finally: conn.close()
     return 50, 0
+
+# ★追加: 設定の保存・取得関数
+def upsert_project_settings(project_id, email, password, login_type, memo):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("INSERT OR REPLACE INTO project_settings (project_id, email, password, login_type, memo) VALUES (?, ?, ?, ?, ?)",
+                  (project_id, email, password, login_type, memo))
+        conn.commit()
+        conn.close()
+    except Exception as e: print(f"DB Error: {e}")
+
+def get_project_settings(project_id):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT email, password, login_type, memo FROM project_settings WHERE project_id = ?", (project_id,))
+        row = c.fetchone()
+        conn.close()
+        if row: return {"email": row[0], "password": row[1], "login_type": row[2], "memo": row[3]}
+        return None
+    except: return None
 
 def get_current_kpi(dept: str):
     conn = sqlite3.connect(DB_PATH)
@@ -306,6 +330,23 @@ def root():
 
 ORIGINS = os.getenv("FRONTEND_URL", "*").split(",")
 app.add_middleware(CORSMiddleware, allow_origins=ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+# ★追加: 設定保存・取得用API
+class SettingsModel(BaseModel):
+    email: str
+    password: str
+    login_type: str
+    memo: str
+
+@app.post("/api/settings/{project_id}")
+async def save_settings_endpoint(project_id: str, settings: SettingsModel):
+    upsert_project_settings(project_id, settings.email, settings.password, settings.login_type, settings.memo)
+    return {"status": "success"}
+
+@app.get("/api/settings/{project_id}")
+async def get_settings_endpoint(project_id: str):
+    data = get_project_settings(project_id)
+    return data if data else {"email": "", "password": "", "login_type": "", "memo": ""}
 
 class ConnectionManager:
     def __init__(self):

@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { 
   ArrowLeft, Terminal, Send, Cpu, Github, 
-  ShieldCheck, AlertCircle, ImageIcon 
+  ShieldCheck, AlertCircle, ImageIcon, Settings, X 
 } from 'lucide-react';
 
+// WebSocketのURL生成
 const getWebSocketUrl = (channelId: string) => {
   if (typeof window === 'undefined') return '';
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -32,19 +33,29 @@ export default function DevConsole() {
   const params = useParams();
   const router = useRouter();
   
+  // URLからプロジェクトIDを取得（デフォルトはlarubot）
   const projectId = typeof params?.projectId === 'string' ? params.projectId : 'larubot';
 
+  // --- State ---
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   
+  // 設定モーダル用State
+  const [showSettings, setShowSettings] = useState(false);
+  const [projectSettings, setProjectSettings] = useState({
+    email: '', password: '', login_type: '', memo: ''
+  });
+  
+  // --- Refs ---
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // --- WebSocket Connection ---
   useEffect(() => {
-    setMessages([]); 
+    setMessages([]); // チャンネル切り替え時に履歴をクリア（サーバー同期待ち）
     
     const wsUrl = getWebSocketUrl(projectId);
     if (!wsUrl) return;
@@ -65,6 +76,7 @@ export default function DevConsole() {
         try {
           const data = JSON.parse(event.data);
           
+          // 履歴同期
           if (data.type === 'HISTORY_SYNC' && Array.isArray(data.data)) {
             const history = data.data.map((log: any) => ({
               role: log.type === 'gemini' ? 'ai' : (log.type === 'user' ? 'user' : 'system'),
@@ -76,6 +88,7 @@ export default function DevConsole() {
             return;
           }
 
+          // リアルタイムログ
           if (data.type === 'LOG' && data.payload) {
             const { msg, type, imageUrl } = data.payload;
             if (type === 'gemini') {
@@ -112,12 +125,39 @@ export default function DevConsole() {
     };
   }, [projectId]);
 
+  // --- Settings Management ---
+  useEffect(() => {
+    if (projectId) {
+      // 設定読み込み
+      fetch(`/api/settings/${projectId}`)
+        .then(res => res.json())
+        .then(data => setProjectSettings(prev => ({ ...prev, ...data })))
+        .catch(err => console.error("Settings load error:", err));
+    }
+  }, [projectId]);
+
+  const saveSettings = async () => {
+    try {
+      await fetch(`/api/settings/${projectId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(projectSettings)
+      });
+      addMessage('system', 'PROJECT SETTINGS UPDATED SECURELY.');
+      setShowSettings(false);
+    } catch (e) {
+      addMessage('system', 'FAILED TO SAVE SETTINGS.');
+    }
+  };
+
+  // --- Auto Scroll ---
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, isTyping]);
 
+  // --- Helpers ---
   const addMessage = (role: Message['role'], text: string, image?: string) => {
     setMessages(prev => [...prev, {
       role, text, time: new Date().toLocaleTimeString(), image
@@ -169,6 +209,7 @@ export default function DevConsole() {
     router.push(`/dev/${repoId}`);
   };
 
+  // --- Render ---
   return (
     <div className="fixed inset-0 h-[100dvh] w-full bg-zinc-950 text-zinc-300 font-mono flex flex-col md:flex-row overflow-hidden selection:bg-purple-500/30">
       
@@ -224,9 +265,20 @@ export default function DevConsole() {
                 Target: <span className="text-white">{projectId.toUpperCase()}</span>
               </span>
            </div>
-           <div className="flex items-center gap-2 text-[10px] text-zinc-500 bg-black/40 px-3 py-1 rounded-full border border-zinc-800 shrink-0">
-              <ShieldCheck size={12} className="text-emerald-500"/>
-              <span className="hidden md:inline">WRITE_ACCESS</span>
+           
+           <div className="flex items-center gap-2">
+             <div className="flex items-center gap-2 text-[10px] text-zinc-500 bg-black/40 px-3 py-1 rounded-full border border-zinc-800 shrink-0">
+                <ShieldCheck size={12} className="text-emerald-500"/>
+                <span className="hidden md:inline">WRITE_ACCESS</span>
+             </div>
+             
+             {/* 設定ボタン */}
+             <button 
+               onClick={() => setShowSettings(true)}
+               className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-purple-400 transition-colors"
+             >
+               <Settings size={18} />
+             </button>
            </div>
         </div>
 
@@ -289,6 +341,73 @@ export default function DevConsole() {
            </div>
         </div>
       </div>
+
+      {/* 設定モーダル */}
+      {showSettings && (
+        <div className="absolute inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-md shadow-2xl p-6 animate-in fade-in zoom-in-95">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Settings size={18} className="text-purple-500"/>
+                PROJECT_CONFIG
+              </h2>
+              <button onClick={() => setShowSettings(false)} className="text-zinc-500 hover:text-white">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-zinc-500 block mb-1">LOGIN EMAIL</label>
+                <input 
+                  type="text" 
+                  value={projectSettings.email}
+                  onChange={e => setProjectSettings({...projectSettings, email: e.target.value})}
+                  className="w-full bg-black border border-zinc-700 rounded p-2 text-sm text-white focus:border-purple-500 outline-none"
+                  placeholder="user@example.com"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-zinc-500 block mb-1">PASSWORD</label>
+                <input 
+                  type="text" 
+                  value={projectSettings.password}
+                  onChange={e => setProjectSettings({...projectSettings, password: e.target.value})}
+                  className="w-full bg-black border border-zinc-700 rounded p-2 text-sm text-white focus:border-purple-500 outline-none"
+                  placeholder="••••••••"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-zinc-500 block mb-1">LOGIN TYPE / ROLE</label>
+                <input 
+                  type="text" 
+                  value={projectSettings.login_type}
+                  onChange={e => setProjectSettings({...projectSettings, login_type: e.target.value})}
+                  className="w-full bg-black border border-zinc-700 rounded p-2 text-sm text-white focus:border-purple-500 outline-none"
+                  placeholder="User / Admin / Host"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-zinc-500 block mb-1">MEMO / CONTEXT</label>
+                <textarea 
+                  value={projectSettings.memo}
+                  onChange={e => setProjectSettings({...projectSettings, memo: e.target.value})}
+                  className="w-full bg-black border border-zinc-700 rounded p-2 text-sm text-white focus:border-purple-500 outline-none h-20"
+                  placeholder="Specific login instructions..."
+                />
+              </div>
+              
+              <button 
+                onClick={saveSettings}
+                className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2 mt-2"
+              >
+                <ShieldCheck size={16} />
+                SAVE CREDENTIALS
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       <style jsx>{`
         .scrollbar-hide::-webkit-scrollbar { display: none; }
