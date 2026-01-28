@@ -372,7 +372,7 @@ async def browser_screenshot():
     async with phantom_browser.lock:
         if not phantom_browser.page: return "Error: Browser not open."
         try:
-            # 1. スクリーンショット撮影（視覚情報）
+            # 1. スクリーンショット撮影
             screenshot_bytes = await phantom_browser.page.screenshot(type='jpeg', quality=60)
             img_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
             await manager.broadcast({
@@ -383,12 +383,13 @@ async def browser_screenshot():
             # 2. ページのテキスト取得
             text = await phantom_browser.page.inner_text('body')
             
-            # 3. ★重要: クリック可能な要素（リンク・ボタン）を抽出してAIに教える
-            # これがないとAIは「どこを押せばいいか」分かりません
+            # 3. リンク・ボタン抽出 (JavaScriptの修正版)
+            # Pythonの # コメントはJSではエラーになるため削除しました
             interactive_elements = await phantom_browser.page.evaluate('''() => {
-                return Array.from(document.querySelectorAll('a, button, input[type="submit"], input[type="button"]'))
-                    .filter(el => el.innerText.trim().length > 0 && el.offsetParent !== null) # 見えているものだけ
-                    .slice(0, 50) # トークン節約のため上から50個まで
+                const elements = Array.from(document.querySelectorAll('a, button, input[type="submit"], input[type="button"]'));
+                return elements
+                    .filter(el => el.innerText.trim().length > 0 && el.offsetParent !== null)
+                    .slice(0, 50)
                     .map(el => {
                         let t = el.innerText.trim().replace(/\\n/g, ' ');
                         let h = el.getAttribute('href') || 'button';
@@ -398,17 +399,18 @@ async def browser_screenshot():
             
             links_summary = "\n".join(interactive_elements)
             
-            # AIへの報告レポートを作成
             return f"""
 Snapshot taken.
 
 === Page Text (Summary) ===
 {text[:2000]}...
 
-=== Interactive Elements (You can click these) ===
+=== Interactive Elements (Clickable) ===
 {links_summary}
             """
-        except Exception as e: return f"Shot Error: {e}"
+        except Exception as e:
+            print(f"Screenshot Error: {e}") # ログにエラーを出す
+            return f"Shot Error: {e}"
 
 async def browser_click(target: str):
     async with phantom_browser.lock:
