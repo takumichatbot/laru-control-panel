@@ -413,6 +413,9 @@ async def browser_screenshot():
     async with phantom_browser.lock:
         if not phantom_browser.page: return "Error: Browser not open."
         try:
+            # ページが完全に描画されるのを少し待つ（SPA対策）
+            await asyncio.sleep(1)
+            
             # 1. スクリーンショット撮影
             screenshot_bytes = await phantom_browser.page.screenshot(type='jpeg', quality=60)
             img_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
@@ -424,51 +427,64 @@ async def browser_screenshot():
             # 2. ページのテキスト取得
             text = await phantom_browser.page.inner_text('body')
             
-            # 3. リンク・ボタン・入力フォーム抽出 (JavaScriptの強化版)
-            # ★修正箇所: inputタグの name, id, placeholder, type を取得するように変更
+            # 3. 操作可能要素の完全解析 (JS強化版)
+            # class, id, href, aria-label, placeholder を全て取得してAIに渡す
             interactive_elements = await phantom_browser.page.evaluate('''() => {
-                const elements = Array.from(document.querySelectorAll('a, button, input, textarea, select'));
+                const elements = Array.from(document.querySelectorAll('a, button, input, textarea, select, [role="button"]'));
                 return elements
                     .filter(el => {
-                        // 見えている、かつ操作可能な要素のみ
                         const style = window.getComputedStyle(el);
                         return style.display !== 'none' && style.visibility !== 'hidden' && !el.disabled;
                     })
-                    .slice(0, 100)
+                    .slice(0, 150) // 取得数を増やす
                     .map(el => {
                         let tagName = el.tagName.toLowerCase();
                         let t = el.innerText ? el.innerText.trim().replace(/\\n/g, ' ') : '';
+                        if (t.length > 20) t = t.substring(0, 20) + "..."; // 長すぎるテキストはカット
                         
-                        // input要素の場合、属性情報を詳しく取得
                         let attrs = [];
+                        
+                        // IDとClassは重要
+                        if (el.id) attrs.push(`id="${el.id}"`);
+                        if (el.className && typeof el.className === 'string') attrs.push(`class="${el.className}"`);
+                        
+                        // リンク先
+                        let href = el.getAttribute('href');
+                        if (href) attrs.push(`href="${href}"`);
+                        
+                        // アクセシビリティ情報
+                        let aria = el.getAttribute('aria-label');
+                        if (aria) attrs.push(`aria-label="${aria}"`);
+                        
+                        // 入力フォーム情報
                         if (tagName === 'input' || tagName === 'textarea') {
                             if (el.type) attrs.push(`type="${el.type}"`);
                             if (el.name) attrs.push(`name="${el.name}"`);
-                            if (el.id) attrs.push(`id="${el.id}"`);
                             if (el.placeholder) attrs.push(`placeholder="${el.placeholder}"`);
-                            if (el.value) attrs.push(`value="${el.value}"`);
-                            t = `[INPUT] ${t}`; // 識別しやすくする
+                            t = `[INPUT]`; // 入力欄であることを強調
+                        } else if (tagName === 'a') {
+                            t = `[LINK] ${t}`;
                         } else {
-                            // リンクやボタン
-                            let href = el.getAttribute('href');
-                            if (href) attrs.push(`href="${href}"`);
+                            t = `[BTN] ${t}`;
                         }
                         
-                        let attrStr = attrs.length > 0 ? `(${attrs.join(', ')})` : '';
-                        return `${t} ${attrStr}`; 
+                        let attrStr = attrs.length > 0 ? ` (${attrs.join(', ')})` : '';
+                        return `${t}${attrStr}`; 
                     });
             }''')
             
             links_summary = "\n".join(interactive_elements)
             
             return f"""
-Snapshot taken. (Note: Fonts may be missing in the screenshot)
+Snapshot taken. 
+⚠️ WARNING: Fonts are broken on the server. Text may appear as '□□□'.
+You MUST rely on the 'Interactive Elements' list below. Look for 'class', 'id', 'href', or 'name' attributes containing keywords like "login", "signin", "email", "user".
 
-=== Interactive Elements (Detailed) ===
+=== Interactive Elements (Code View) ===
 {links_summary}
 
 === Page Text (Summary) ===
-{text[:2000]}...
+{text[:1000]}...
             """
         except Exception as e:
             print(f"Screenshot Error: {e}") 
@@ -650,13 +666,15 @@ async def process_command(command: str, current_channel: str):
     # 3. ペルソナとシステムプロンプトの構築
     persona = DEPT_PERSONAS.get(current_channel, DEPT_PERSONAS["CENTRAL"])
     system_prompt = (
-        f"あなたは{persona['name']}。\n{persona['instructions']}{credentials_info}\n"
-        "状況が変化したら必ず `browser_screenshot` を撮ってください。\n\n"
-        "【重要: 行動のルール】\n"
-        "1. **Thought (思考)**: 次に行うべきことを考える。\n"
-        "2. **Report (報告)**: ユーザーへの報告を短く書く。\n"
-        "3. **Action (実行)**: **Pythonコードや `Action: func()` というテキストを書くことは禁止です。**\n"
-        "   必ず **GeminiのFunction Call機能（Tool Use）** を使用して、実際に関数を実行してください。\n"
+        f"あなたは{persona['name']}。\n{persona['instructions']}{credentials_info}\n\n"
+        "【重要: 環境制約】\n"
+        "現在、サーバー側のフォント欠落により、ブラウザ上の日本語テキストが「□□□」と表示されます。\n"
+        "したがって、**画面上の文字（テキスト）には頼らないでください。**\n"
+        "代わりに `browser_screenshot` が返す **「Interactive Elements」の `id`, `class`, `href`, `name` 属性** を見て操作対象を判断してください。\n"
+        "例: テキストが読めなくても `href='/login'` や `name='email'` があれば、それが正解です。\n\n"
+        "【行動のルール】\n"
+        "1. **Thought**: コード上の手がかり（classやhref）から対象を特定する。\n"
+        "2. **Action**: 必ずFunction Callを使うこと。"
     )
 
     # 4. 会話履歴の構築
