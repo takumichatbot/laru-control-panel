@@ -630,9 +630,10 @@ async def process_command(command: str, current_channel: str):
     system_prompt = (
         f"あなたは{persona['name']}。\n{persona['instructions']}{credentials_info}\n"
         "状況が変化したら必ず `browser_screenshot` を撮ってください。"
+        "思考(Thought)と行動(Action)はセットで行い、行動を伴わない発言は避けてください。"
     )
 
-    # 4. 会話履歴の構築（過去ログ + システムログ）
+    # 4. 会話履歴の構築
     history = [{"role": "user", "parts": [system_prompt]}]
     past = get_channel_logs(current_channel, 8) 
     for p in past:
@@ -651,55 +652,69 @@ async def process_command(command: str, current_channel: str):
 
     try:
         response = None
-        # 5. APIエラー（429 Too Many Requests）対策の自動リトライループ
+        # 5. APIエラー対策（429リトライ）
         max_retries = 3
         for attempt in range(max_retries):
             try:
                 response = await asyncio.to_thread(chat.send_message, command)
-                break # 成功したらループを抜ける
+                break 
             except Exception as e:
                 err_str = str(e)
                 if "429" in err_str or "Resource exhausted" in err_str:
-                    wait_time = (attempt + 1) * 10 # 10秒, 20秒... と待機時間を増やす
-                    await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"⚠️ API制限（混雑中）。{wait_time}秒待機して再試行します... ({attempt+1}/{max_retries})", "type": "sys"}})
+                    wait_time = (attempt + 1) * 10 
+                    await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"⚠️ API制限中。{wait_time}秒待機... ({attempt+1}/{max_retries})", "type": "sys"}})
                     await asyncio.sleep(wait_time)
                 else:
-                    raise e # その他のエラーは即座に投げる
+                    raise e
         
         if not response:
-            raise Exception("APIのリソース制限により、3回の再試行に失敗しました。時間を置いてください。")
+            raise Exception("APIエラー: リトライ失敗")
 
         # ---------------------------------------------------------
-        # 6. 「口だけ番長」即時修正ロジック（修正版）
+        # 6. 「口だけ番長」対策 & 連続実行ループ（修正版）
         # ---------------------------------------------------------
-        # AIが「言葉だけで返して、ツールを呼ばなかった」場合を検知
-        first_part_text = "".join([p.text for p in response.parts if not p.function_call])
-        has_tool_call = any(p.function_call for p in response.parts)
-
-        if first_part_text and not has_tool_call:
-            # ユーザーには見せず、裏で「口だけじゃなくて手を動かせ」と指示して再生成させる
-            print(f"👮 [{current_channel}] 有言不実行を検知。再生成を要求します。") 
-            
-            # 履歴に「AIの口だけ発言」を追加
-            history.append({"role": "model", "parts": [first_part_text]})
-            # 履歴に「叱責」を追加
-            history.append({"role": "user", "parts": ["思考・報告だけでなく、必ず具体的なアクション（ツール実行）を伴ってください。今すぐ実行してください。"]})
-            
-            # AIに再生成させる（response変数を上書き）
-            response = await asyncio.to_thread(chat.send_message, "ツールを実行してください")
-
-        # ---------------------------------------------------------
-        # 7. ツール実行ループ（最大5回連続実行）
-        # ---------------------------------------------------------
-        for _ in range(5):
+        # 最大10ターンまで連続実行を許可（スクショ→入力→クリック等の連鎖のため）
+        for i in range(10):
             part_with_fc = next((p for p in response.parts if p.function_call), None)
-            
+            text_part = "".join([p.text for p in response.parts if not p.function_call])
+
+            # ★修正ポイント: ツール呼び出しがない場合
+            if not part_with_fc:
+                # すでに何らかのツールを実行した後(i > 0)や、初回でも「やります」だけの場合
+                # AIが「スクショ撮りました。次は入力します」と言って止まるのを防ぐ
+                if text_part:
+                    # 完了報告っぽい言葉（「完了」「終了」）がなければ、続きを促す
+                    if "完了" not in text_part and "終了" not in text_part and i < 8:
+                        print(f"👮 [{current_channel}] 連鎖中断を検知(Turn {i})。継続を要求します。")
+                        # ユーザーには見せずに、履歴に「続きをやって」と注入して再生成
+                        history.append({"role": "model", "parts": [text_part]})
+                        history.append({"role": "user", "parts": ["状況報告は不要です。次のアクション（ツール実行）を直ちに行ってください。"]})
+                        
+                        try:
+                            # AIに強制的に続きを考えさせる
+                            response = await asyncio.to_thread(chat.send_message, "次のアクションを実行")
+                            
+                            # もし再生成してもツールを呼ばなければ、本当にやることがないとして終了
+                            if not any(p.function_call for p in response.parts):
+                                break
+                            else:
+                                continue # ツール呼び出しがあったので、下の処理に進む
+                        except:
+                            break
+                    else:
+                        break # 「完了」と言っているので終了
+                else:
+                    break
+
+            # -----------------------------------------------------
+            # 7. ツール実行処理
+            # -----------------------------------------------------
             if part_with_fc:
                 fc = part_with_fc.function_call
                 fname, args = fc.name, fc.args
                 await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"🔧 {fname}...", "type": "thinking"}})
                 
-                # ツールの実行
+                # 実行
                 res = "Error"
                 if fname == "read_github_content": res = await read_github_content(args.get("target_repo"), args.get("file_path"))
                 elif fname == "commit_github_fix": res = await commit_github_fix(args.get("target_repo"), args.get("file_path"), args.get("new_content"), args.get("commit_message"))
@@ -714,20 +729,16 @@ async def process_command(command: str, current_channel: str):
                 elif fname == "browser_scroll": res = await browser_scroll(args.get("direction"))
                 elif fname == "run_test_validation": res = await run_test_validation(args.get("target_file"), args.get("test_code"))
 
-                # エラー時の処理（AIに状況を伝えて判断させる）
-                if "Error" in str(res):
-                    # エラー結果をAIに返す
-                    response = await asyncio.to_thread(chat.send_message, genai.protos.Content(
-                        role='function', parts=[genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fname, response={'result': f"ERROR: {str(res)}. Consider asking user for help."}))]))
-                else:
-                    # 成功結果をAIに返す
-                    response = await asyncio.to_thread(chat.send_message, genai.protos.Content(
-                        role='function', parts=[genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fname, response={'result': str(res)}))]))
+                # 結果をAIに返す（これで次の response が生成される）
+                role_res = {'result': str(res)}
+                if "Error" in str(res): role_res['result'] = f"ERROR: {str(res)}"
+
+                response = await asyncio.to_thread(chat.send_message, genai.protos.Content(
+                    role='function', parts=[genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fname, response=role_res))]))
             else:
-                # ツール呼び出しがなくなったら終了
                 break
         
-        # 8. 最終的なテキスト応答をブロードキャスト
+        # 8. 最終応答の送信
         final_text = "".join([p.text for p in response.parts if not p.function_call])
         if final_text:
             await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": final_text, "type": "gemini"}})
