@@ -313,3 +313,13 @@ export default function DevConsole() {
     </div>
   );
 }
+
+// ★ここに追加: 静的エクスポート用（ビルドエラー回避）
+export function generateStaticParams() {
+  return [
+    { projectId: 'larubot' },
+    { projectId: 'flastal' },
+    { projectId: 'laruvisona' },
+    { projectId: 'larunexus' },
+  ];
+}
