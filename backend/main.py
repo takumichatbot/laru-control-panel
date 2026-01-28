@@ -669,7 +669,28 @@ async def process_command(command: str, current_channel: str):
         if not response:
             raise Exception("APIのリソース制限により、3回の再試行に失敗しました。時間を置いてください。")
 
-        # 6. ツール実行ループ（最大5回連続実行）
+        # ---------------------------------------------------------
+        # 6. 「口だけ番長」即時修正ロジック（修正版）
+        # ---------------------------------------------------------
+        # AIが「言葉だけで返して、ツールを呼ばなかった」場合を検知
+        first_part_text = "".join([p.text for p in response.parts if not p.function_call])
+        has_tool_call = any(p.function_call for p in response.parts)
+
+        if first_part_text and not has_tool_call:
+            # ユーザーには見せず、裏で「口だけじゃなくて手を動かせ」と指示して再生成させる
+            print(f"👮 [{current_channel}] 有言不実行を検知。再生成を要求します。") 
+            
+            # 履歴に「AIの口だけ発言」を追加
+            history.append({"role": "model", "parts": [first_part_text]})
+            # 履歴に「叱責」を追加
+            history.append({"role": "user", "parts": ["思考・報告だけでなく、必ず具体的なアクション（ツール実行）を伴ってください。今すぐ実行してください。"]})
+            
+            # AIに再生成させる（response変数を上書き）
+            response = await asyncio.to_thread(chat.send_message, "ツールを実行してください")
+
+        # ---------------------------------------------------------
+        # 7. ツール実行ループ（最大5回連続実行）
+        # ---------------------------------------------------------
         for _ in range(5):
             part_with_fc = next((p for p in response.parts if p.function_call), None)
             
@@ -703,23 +724,13 @@ async def process_command(command: str, current_channel: str):
                     response = await asyncio.to_thread(chat.send_message, genai.protos.Content(
                         role='function', parts=[genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fname, response={'result': str(res)}))]))
             else:
+                # ツール呼び出しがなくなったら終了
                 break
         
-        # 7. 最終的なテキスト応答をブロードキャスト
+        # 8. 最終的なテキスト応答をブロードキャスト
         final_text = "".join([p.text for p in response.parts if not p.function_call])
         if final_text:
             await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": final_text, "type": "gemini"}})
-            
-        # ★追加: 「口だけ番長」対策
-        # AIがテキストだけ返してツールを使わなかった場合、強制的にやり直しさせる
-        first_part_text = "".join([p.text for p in response.parts if not p.function_call])
-        has_tool_call = any(p.function_call for p in response.parts)
-        
-        if first_part_text and not has_tool_call:
-             # 「ツールを使え」と裏で命令して、もう一度生成させる（ユーザーには見せない）
-             history.append({"role": "model", "parts": [first_part_text]})
-             history.append({"role": "user", "parts": ["報告は分かりました。で、ツール実行は？ 言葉だけでなく必ずツールを呼んでください。"]})
-             response = await asyncio.to_thread(chat.send_message, "ツールを実行してください")
 
     except Exception as e:
         await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"Error: {e}", "type": "error"}})
