@@ -611,7 +611,7 @@ async def process_command(command: str, current_channel: str):
     # 1. ユーザーの指示をログ出力
     await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"Cmd: {command}", "type": "user"}})
     
-    # 2. 金庫（設定DB）から認証情報を取得してプロンプトに注入
+    # 2. 金庫（設定DB）から認証情報を取得
     settings = get_project_settings(current_channel)
     credentials_info = ""
     if settings and (settings['email'] or settings['password'] or settings['memo']):
@@ -625,7 +625,7 @@ async def process_command(command: str, current_channel: str):
             f"※ログインが必要な場面では、ユーザーに聞かず、黙ってこの情報を使用してください。"
         )
 
-    # 3. ペルソナとシステムプロンプトの構築（★重要修正：テキストでのコード記述を禁止）
+    # 3. ペルソナとシステムプロンプトの構築
     persona = DEPT_PERSONAS.get(current_channel, DEPT_PERSONAS["CENTRAL"])
     system_prompt = (
         f"あなたは{persona['name']}。\n{persona['instructions']}{credentials_info}\n"
@@ -635,7 +635,6 @@ async def process_command(command: str, current_channel: str):
         "2. **Report (報告)**: ユーザーへの報告を短く書く。\n"
         "3. **Action (実行)**: **Pythonコードや `Action: func()` というテキストを書くことは禁止です。**\n"
         "   必ず **GeminiのFunction Call機能（Tool Use）** を使用して、実際に関数を実行してください。\n"
-        "   （テキストで書くだけでは実行されません！）"
     )
 
     # 4. 会話履歴の構築
@@ -662,9 +661,14 @@ async def process_command(command: str, current_channel: str):
         for attempt in range(max_retries):
             try:
                 response = await asyncio.to_thread(chat.send_message, command)
+                # ★追加: 応答がブロックされていないか確認（ここで list index error を防ぐ）
+                if not response.candidates:
+                    raise Exception("Safety Block: 応答が安全フィルタによりブロックされました。")
                 break 
             except Exception as e:
                 err_str = str(e)
+                if "Safety Block" in err_str: raise e # 安全ブロックはリトライしても無駄なので即終了
+                
                 if "429" in err_str or "Resource exhausted" in err_str:
                     wait_time = (attempt + 1) * 10 
                     await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"⚠️ API制限中。{wait_time}秒待機... ({attempt+1}/{max_retries})", "type": "sys"}})
@@ -678,14 +682,16 @@ async def process_command(command: str, current_channel: str):
         # 6. 「口だけ番長」＆「コード書き逃げ」対策ループ
         # ---------------------------------------------------------
         for i in range(10):
+            # 安全チェック：candidatesが空ならループ終了
+            if not response.candidates: break
+
             part_with_fc = next((p for p in response.parts if p.function_call), None)
             text_part = "".join([p.text for p in response.parts if not p.function_call])
 
             # ★ツール呼び出しがない場合
             if not part_with_fc:
-                # テキストはあるが、完了宣言がない場合 -> 続きを促す
                 if text_part:
-                    # 「Action: print(...)」のようなテキストコード書き逃げを検知した場合
+                    # 偽コードや途中終了を検知
                     is_fake_code = "Action:" in text_part or "print(" in text_part or "browser_" in text_part
                     
                     if is_fake_code or ("完了" not in text_part and "終了" not in text_part and i < 8):
@@ -697,13 +703,12 @@ async def process_command(command: str, current_channel: str):
                             print(f"👮 [{current_channel}] 連鎖中断を検知(Turn {i})。継続を要求します。")
                             msg = "状況報告は不要。次のアクション（ツール実行）を直ちに行え。"
 
-                        # 履歴に注入して再生成
                         history.append({"role": "model", "parts": [text_part]})
                         history.append({"role": "user", "parts": [msg]})
                         
                         try:
                             response = await asyncio.to_thread(chat.send_message, msg)
-                            # 再生成してもツールがなければ終了
+                            if not response.candidates: break
                             if not any(p.function_call for p in response.parts): break
                             else: continue 
                         except: break
@@ -745,16 +750,26 @@ async def process_command(command: str, current_channel: str):
                 break
         
         # 8. 最終応答
-        final_text = "".join([p.text for p in response.parts if not p.function_call])
-        if final_text:
-            await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": final_text, "type": "gemini"}})
+        if response.candidates:
+            final_text = "".join([p.text for p in response.parts if not p.function_call])
+            if final_text:
+                await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": final_text, "type": "gemini"}})
 
     except Exception as e:
         await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"Error: {e}", "type": "error"}})
         
 # --- Model Init ---
+# 安全設定：意図的なブロックを防ぐため、すべてのフィルタをOFFにします
+safety_settings = [
+    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+]
+
 model = genai.GenerativeModel(
     model_name='gemini-2.0-flash',
+    safety_settings=safety_settings,  # ★ここを追加
     tools=[
         commit_github_fix, read_github_content, fetch_repo_structure, search_codebase,
         check_render_status, run_terminal_command, run_test_validation,
