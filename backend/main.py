@@ -372,14 +372,17 @@ async def browser_screenshot():
     async with phantom_browser.lock:
         if not phantom_browser.page: return "Error: Browser not open."
         try:
+            # スクリーンショット撮影と送信
             screenshot_bytes = await phantom_browser.page.screenshot(type='jpeg', quality=60)
             img_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
             await manager.broadcast({
                 "type": "LOG", "channelId": "DEV", 
                 "payload": {"msg": "📸 Screen Capture", "type": "browser", "imageUrl": f"data:image/jpeg;base64,{img_b64}"}
             })
+            
+            # ★修正: ページのテキストを多めに取得（500文字→5000文字）
             text = await phantom_browser.page.inner_text('body')
-            return f"Snapshot sent. Page text: {text[:500]}..."
+            return f"Snapshot taken. Page Content:\n{text[:5000]}" 
         except Exception as e: return f"Shot Error: {e}"
 
 async def browser_click(target: str):
@@ -411,12 +414,31 @@ async def browser_scroll(direction: str):
 async def run_autonomous_browser_agent(url: str, task_description: str, channel_id: str):
     await manager.broadcast({"type": "LOG", "channelId": channel_id, "payload": {"msg": f"🌐 潜入開始: {url}", "type": "thinking"}})
     try:
-        await browser_navigate(url)
-        await browser_screenshot()
-        # Geminiへの報告
-        prompt = f"URL: {url}\nTask: {task_description}\nブラウザでアクセスしました。スクリーンショットとテキストを確認し、状況を報告してください。"
+        # 1. ブラウザを操作して情報を集める
+        nav_result = await browser_navigate(url)
+        shot_result = await browser_screenshot() # ここにページのテキストが入っています
+
+        # 2. 集めた情報をプロンプトに埋め込む
+        prompt = f"""
+        Target URL: {url}
+        User Request: {task_description}
+        
+        [Browser Logs]
+        {nav_result}
+        {shot_result}
+        
+        Based on the above page content, report the status to the user in Japanese.
+        """
+        
+        # 3. AIに報告させる（ここでエラーが出ないように安全策を追加）
         response = await asyncio.to_thread(model.generate_content, prompt)
-        await manager.broadcast({"type": "LOG", "channelId": channel_id, "payload": {"msg": response.text, "type": "gemini"}})
+        
+        # 安全にテキストだけを取り出す（万が一ツールを使おうとしても無視する）
+        final_text = "".join([p.text for p in response.parts if not p.function_call])
+        if not final_text: final_text = "✅ ページを確認しました（要約の生成に失敗しましたが、アクセスは成功しました）。"
+
+        await manager.broadcast({"type": "LOG", "channelId": channel_id, "payload": {"msg": final_text, "type": "gemini"}})
+
     except Exception as e:
         await manager.broadcast({"type": "LOG", "channelId": channel_id, "payload": {"msg": f"Agent Error: {e}", "type": "error"}})
 
