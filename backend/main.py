@@ -604,16 +604,34 @@ async def run_strategic_council(topic: str, requester: str):
     summary = await asyncio.to_thread(model.generate_content, f"意見を統合して結論を出してください:\n{chr(10).join(opinions)}")
     await manager.broadcast({"type": "LOG", "channelId": requester, "payload": {"msg": f"⚖️ **結論**\n{summary.text}", "type": "sys"}})
 
-# --- process_command (対話・可視化強化版) ---
 async def process_command(command: str, current_channel: str):
+    # 1. ユーザーの指示をログ出力
     await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"Cmd: {command}", "type": "user"}})
     
+    # 2. 金庫（設定DB）から認証情報を取得してプロンプトに注入
+    settings = get_project_settings(current_channel)
+    credentials_info = ""
+    if settings and (settings['email'] or settings['password'] or settings['memo']):
+        credentials_info = (
+            f"\n\n【極秘：登録済み認証情報】\n"
+            f"プロジェクトID: {current_channel}\n"
+            f"Email: {settings['email']}\n"
+            f"Password: {settings['password']}\n"
+            f"Login Type: {settings['login_type']}\n"
+            f"Memo: {settings['memo']}\n"
+            f"※ログインが必要な場面では、ユーザーに聞かず、黙ってこの情報を使用してください。"
+        )
+
+    # 3. ペルソナとシステムプロンプトの構築
     persona = DEPT_PERSONAS.get(current_channel, DEPT_PERSONAS["CENTRAL"])
-    
-    # ★修正: 「こまめにスクショを撮れ」と念押しするプロンプト
-    history = [{"role": "user", "parts": [f"あなたは{persona['name']}。\n{persona['instructions']}\n状況が変化したら必ず `browser_screenshot` を撮ってください。"]}]
-    
-    past = get_channel_logs(current_channel, 15) 
+    system_prompt = (
+        f"あなたは{persona['name']}。\n{persona['instructions']}{credentials_info}\n"
+        "状況が変化したら必ず `browser_screenshot` を撮ってください。"
+    )
+
+    # 4. 会話履歴の構築（過去ログ + システムログ）
+    history = [{"role": "user", "parts": [system_prompt]}]
+    past = get_channel_logs(current_channel, 8) 
     for p in past:
         role = "user"
         content = p['msg']
@@ -627,17 +645,34 @@ async def process_command(command: str, current_channel: str):
     history.append({"role": "user", "parts": [f"指示: {command}"]})
 
     chat = model.start_chat(history=history)
+
     try:
-        response = await asyncio.to_thread(chat.send_message, command)
+        response = None
+        # 5. APIエラー（429 Too Many Requests）対策の自動リトライループ
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = await asyncio.to_thread(chat.send_message, command)
+                break # 成功したらループを抜ける
+            except Exception as e:
+                err_str = str(e)
+                if "429" in err_str or "Resource exhausted" in err_str:
+                    wait_time = (attempt + 1) * 10 # 10秒, 20秒... と待機時間を増やす
+                    await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"⚠️ API制限（混雑中）。{wait_time}秒待機して再試行します... ({attempt+1}/{max_retries})", "type": "sys"}})
+                    await asyncio.sleep(wait_time)
+                else:
+                    raise e # その他のエラーは即座に投げる
         
-        # ツール実行ループ
+        if not response:
+            raise Exception("APIのリソース制限により、3回の再試行に失敗しました。時間を置いてください。")
+
+        # 6. ツール実行ループ（最大5回連続実行）
         for _ in range(5):
             part_with_fc = next((p for p in response.parts if p.function_call), None)
             
             if part_with_fc:
                 fc = part_with_fc.function_call
                 fname, args = fc.name, fc.args
-                # 「思考中...」を表示
                 await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"🔧 {fname}...", "type": "thinking"}})
                 
                 # ツールの実行
@@ -655,21 +690,19 @@ async def process_command(command: str, current_channel: str):
                 elif fname == "browser_scroll": res = await browser_scroll(args.get("direction"))
                 elif fname == "run_test_validation": res = await run_test_validation(args.get("target_file"), args.get("test_code"))
 
-                # ★重要: エラーが起きたら、隠さずにループを中断して相談させる
+                # エラー時の処理（AIに状況を伝えて判断させる）
                 if "Error" in str(res):
-                    update_kpi(current_channel, -2, fname)
-                    # エラー内容をAIに伝えて、ユーザーへの報告を作らせる
+                    # エラー結果をAIに返す
                     response = await asyncio.to_thread(chat.send_message, genai.protos.Content(
-                        role='function', parts=[genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fname, response={'result': f"CRITICAL ERROR: {str(res)}. Stop and ask user for help."}))]))
+                        role='function', parts=[genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fname, response={'result': f"ERROR: {str(res)}. Consider asking user for help."}))]))
                 else:
-                    update_kpi(current_channel, 5, fname)
-                    # 成功時は通常通り継続
+                    # 成功結果をAIに返す
                     response = await asyncio.to_thread(chat.send_message, genai.protos.Content(
                         role='function', parts=[genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fname, response={'result': str(res)}))]))
             else:
                 break
         
-        # 最終的なAIの発言（報告・相談）を表示
+        # 7. 最終的なテキスト応答をブロードキャスト
         final_text = "".join([p.text for p in response.parts if not p.function_call])
         if final_text:
             await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": final_text, "type": "gemini"}})
