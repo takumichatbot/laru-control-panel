@@ -581,17 +581,39 @@ async def process_command(command: str, current_channel: str):
 
     persona = DEPT_PERSONAS.get(current_channel, DEPT_PERSONAS["CENTRAL"])
     
-    history = [{"role": "user", "parts": [f"あなたは{persona['name']}。\n指示: {command}"]}]
-    past = get_channel_logs(current_channel, 5)
+    # 1. 基本設定（システムプロンプト）
+    history = [{"role": "user", "parts": [f"あなたは{persona['name']}。{persona['instructions']}\n直前の状況（ブラウザのログなど）を踏まえて行動せよ。"]}]
+    
+    # 2. ★記憶の復元（ここを修正！）
+    # 過去10件のログを取得し、ブラウザの結果や思考も「コンテキスト」としてAIに読ませる
+    past = get_channel_logs(current_channel, 10) 
     for p in past: 
-        if p['type'] in ['user', 'gemini']:
-            history.append({"role": "model" if p['type']=='gemini' else "user", "parts": [p['msg']]})
+        role = "user"
+        content = p['msg']
+        
+        # ユーザーの発言
+        if p['type'] == 'user':
+            role = "user"
+        # AIの発言
+        elif p['type'] == 'gemini':
+            role = "model"
+        # ★重要: ブラウザが見た内容や、ツールの結果も「モデル自身の記憶」として扱う
+        elif p['type'] in ['browser', 'thinking', 'sys']:
+            role = "model"
+            content = f"（システム/ツールログ）: {p['msg']}"
+        else:
+            continue # errorなどは除外しても良い
+
+        history.append({"role": role, "parts": [content]})
+
+    # 3. 最新の指示を追加
+    history.append({"role": "user", "parts": [f"指示: {command}"]})
 
     chat = model.start_chat(history=history)
     try:
         response = await asyncio.to_thread(chat.send_message, command)
         
-        # ★修正: 全パートから関数呼び出しを安全に探す
+        # Tool Use Loop
         for _ in range(5):
             part_with_fc = next((p for p in response.parts if p.function_call), None)
             
@@ -602,7 +624,6 @@ async def process_command(command: str, current_channel: str):
                 await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"🔧 {fname}...", "type": "thinking"}})
                 
                 res = "Error"
-                # 各ツールの実行
                 if fname == "read_github_content": res = await read_github_content(args.get("target_repo"), args.get("file_path"))
                 elif fname == "commit_github_fix": res = await commit_github_fix(args.get("target_repo"), args.get("file_path"), args.get("new_content"), args.get("commit_message"))
                 elif fname == "fetch_repo_structure": res = await fetch_repo_structure(args.get("target_repo"))
@@ -619,12 +640,12 @@ async def process_command(command: str, current_channel: str):
                 if "Error" in str(res): update_kpi(current_channel, -2, fname)
                 else: update_kpi(current_channel, 5, fname)
 
+                # ツール結果をAIに返す
                 response = await asyncio.to_thread(chat.send_message, genai.protos.Content(
                     role='function', parts=[genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fname, response={'result': str(res)}))]))
             else:
                 break
         
-        # ★修正: テキスト部分だけを安全に取り出す（response.textは使わない）
         final_text = "".join([p.text for p in response.parts if not p.function_call])
         if not final_text: final_text = "✅ 処理完了"
 
