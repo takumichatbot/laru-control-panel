@@ -519,13 +519,20 @@ async def immune_system_loop():
 DEPT_PERSONAS = {
     "CENTRAL": {
         "name": "LaruNexus GENESIS",
-        "role": "CEO Office & Strategy",
-        "instructions": "あなたは全権限を持つ統合AIです。ユーザーの意図を汲み取り、適切な専門機能（DEV/INFRA）を呼び出してください。"
+        "role": "Autonomous Agent",
+        "instructions": (
+            "あなたは自律型AIエージェントです。ユーザーのゴール（例：ログインする）に対し、"
+            "『確認しました』のような報告だけで終わらせず、ツールを使って**自律的に次のアクション（クリックや入力）を実行**してください。"
+            "許可を求めず、ゴール達成まで連続してツールを使い倒してください。"
+        )
     },
     "DEV": {
         "name": "LaruNexus Architect",
         "role": "Full Stack Engineer",
-        "instructions": "あなたは自律型エンジニアです。GitHub操作、コード修正、テスト実行を行い、高品質なコードを維持してください。"
+        "instructions": (
+            "あなたは熟練したエンジニアです。コードの調査や修正を行う際、"
+            "一度の検索で諦めず、ファイルの中身を読み、関連ファイルを辿り、解決するまで自律的に調査を続けてください。"
+        )
     },
     "INFRA": {
         "name": "Site Reliability Engineer",
