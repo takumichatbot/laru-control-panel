@@ -110,8 +110,9 @@ export default function NexusPortal() {
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {projects.map((p) => (
+                  // ★修正: URLを個別ページに変更
                   <Link 
-                    href="/dev" 
+                    href={`/dev/${p.id}`}
                     key={p.id} 
                     className={`group/card relative p-4 rounded-lg border transition-all cursor-pointer active:scale-[0.98] bg-black/40 ${p.border} ${p.hover}`}
                   >
@@ -128,8 +129,8 @@ export default function NexusPortal() {
               </div>
               
               <div className="pt-4 border-t border-white/5">
-                {/* 【修正】ここを外部URLではなく /dev への内部リンクに変更 */}
-                <Link href="/dev" className="block w-full">
+                {/* ★修正: デフォルトのコンソールへのリンクも更新 */}
+                <Link href="/dev/larubot" className="block w-full">
                   <button className="group w-full py-4 bg-gradient-to-r from-purple-900/40 to-zinc-900 hover:from-purple-900/60 hover:to-zinc-800 border border-purple-500/30 rounded-lg text-xs font-bold text-purple-200 flex items-center justify-center gap-2 transition-all active:scale-[0.99] shadow-lg hover:shadow-purple-900/20">
                     <Lock size={14} className="group-hover:hidden text-purple-400"/>
                     <Zap size={14} className="hidden group-hover:block text-yellow-400"/>
