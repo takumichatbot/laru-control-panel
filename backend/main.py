@@ -372,7 +372,7 @@ async def browser_screenshot():
     async with phantom_browser.lock:
         if not phantom_browser.page: return "Error: Browser not open."
         try:
-            # スクリーンショット撮影と送信
+            # 1. スクリーンショット撮影（視覚情報）
             screenshot_bytes = await phantom_browser.page.screenshot(type='jpeg', quality=60)
             img_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
             await manager.broadcast({
@@ -380,9 +380,34 @@ async def browser_screenshot():
                 "payload": {"msg": "📸 Screen Capture", "type": "browser", "imageUrl": f"data:image/jpeg;base64,{img_b64}"}
             })
             
-            # ★修正: ページのテキストを多めに取得（500文字→5000文字）
+            # 2. ページのテキスト取得
             text = await phantom_browser.page.inner_text('body')
-            return f"Snapshot taken. Page Content:\n{text[:5000]}" 
+            
+            # 3. ★重要: クリック可能な要素（リンク・ボタン）を抽出してAIに教える
+            # これがないとAIは「どこを押せばいいか」分かりません
+            interactive_elements = await phantom_browser.page.evaluate('''() => {
+                return Array.from(document.querySelectorAll('a, button, input[type="submit"], input[type="button"]'))
+                    .filter(el => el.innerText.trim().length > 0 && el.offsetParent !== null) # 見えているものだけ
+                    .slice(0, 50) # トークン節約のため上から50個まで
+                    .map(el => {
+                        let t = el.innerText.trim().replace(/\\n/g, ' ');
+                        let h = el.getAttribute('href') || 'button';
+                        return `[${t}] -> ${h}`;
+                    });
+            }''')
+            
+            links_summary = "\n".join(interactive_elements)
+            
+            # AIへの報告レポートを作成
+            return f"""
+Snapshot taken.
+
+=== Page Text (Summary) ===
+{text[:2000]}...
+
+=== Interactive Elements (You can click these) ===
+{links_summary}
+            """
         except Exception as e: return f"Shot Error: {e}"
 
 async def browser_click(target: str):
