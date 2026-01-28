@@ -649,7 +649,7 @@ async def process_command(command: str, current_channel: str):
     # 1. ユーザーの指示をログ出力
     await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"Cmd: {command}", "type": "user"}})
     
-    # 2. 金庫（設定DB）から認証情報を取得
+    # 2. 設定情報の注入
     settings = get_project_settings(current_channel)
     credentials_info = ""
     if settings and (settings['email'] or settings['password'] or settings['memo']):
@@ -663,21 +663,21 @@ async def process_command(command: str, current_channel: str):
             f"※ログインが必要な場面では、ユーザーに聞かず、黙ってこの情報を使用してください。"
         )
 
-    # 3. ペルソナとシステムプロンプトの構築
+    # 3. ペルソナとシステムプロンプト（テキスト禁止をさらに強調）
     persona = DEPT_PERSONAS.get(current_channel, DEPT_PERSONAS["CENTRAL"])
     system_prompt = (
         f"あなたは{persona['name']}。\n{persona['instructions']}{credentials_info}\n\n"
         "【重要: 環境制約】\n"
-        "現在、サーバー側のフォント欠落により、ブラウザ上の日本語テキストが「□□□」と表示されます。\n"
-        "したがって、**画面上の文字（テキスト）には頼らないでください。**\n"
-        "代わりに `browser_screenshot` が返す **「Interactive Elements」の `id`, `class`, `href`, `name` 属性** を見て操作対象を判断してください。\n"
-        "例: テキストが読めなくても `href='/login'` や `name='email'` があれば、それが正解です。\n\n"
-        "【行動のルール】\n"
-        "1. **Thought**: コード上の手がかり（classやhref）から対象を特定する。\n"
-        "2. **Action**: 必ずFunction Callを使うこと。"
+        "サーバー側のフォント欠落により、文字は「□□□」になります。\n"
+        "必ず `browser_screenshot` の結果にある **「Interactive Elements」の `id`, `class`, `href`, `name`** を見て操作してください。\n\n"
+        "【重要: 行動ルール】\n"
+        "1. **Report**: 報告は短く。\n"
+        "2. **Action**: `Action: browser_click()` のような**テキストを回答に含めることは厳禁**です。\n"
+        "   テキストではなく、必ず **GeminiのFunction Call機能** を実体として呼び出してください。\n"
+        "   （テキストで書くとエラーになります！）"
     )
 
-    # 4. 会話履歴の構築
+    # 4. 履歴構築
     history = [{"role": "user", "parts": [system_prompt]}]
     past = get_channel_logs(current_channel, 8) 
     for p in past:
@@ -696,64 +696,74 @@ async def process_command(command: str, current_channel: str):
 
     try:
         response = None
-        # 5. APIエラー対策
-        max_retries = 3
-        for attempt in range(max_retries):
+        # 5. 初回リクエスト（APIエラーリトライ付き）
+        for attempt in range(3):
             try:
                 response = await asyncio.to_thread(chat.send_message, command)
-                # ★追加: 応答がブロックされていないか確認（ここで list index error を防ぐ）
-                if not response.candidates:
-                    raise Exception("Safety Block: 応答が安全フィルタによりブロックされました。")
+                if not response.candidates: raise Exception("Safety Block")
                 break 
             except Exception as e:
-                err_str = str(e)
-                if "Safety Block" in err_str: raise e # 安全ブロックはリトライしても無駄なので即終了
-                
-                if "429" in err_str or "Resource exhausted" in err_str:
-                    wait_time = (attempt + 1) * 10 
-                    await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"⚠️ API制限中。{wait_time}秒待機... ({attempt+1}/{max_retries})", "type": "sys"}})
-                    await asyncio.sleep(wait_time)
-                else:
-                    raise e
+                if "Safety" in str(e): raise e
+                await asyncio.sleep((attempt + 1) * 5)
         
-        if not response: raise Exception("APIエラー: リトライ失敗")
+        if not response: raise Exception("API Error")
 
         # ---------------------------------------------------------
-        # 6. 「口だけ番長」＆「コード書き逃げ」対策ループ
+        # 6. 実行ループ（最大10ターン）
         # ---------------------------------------------------------
         for i in range(10):
-            # 安全チェック：candidatesが空ならループ終了
             if not response.candidates: break
 
+            # ツール呼び出し(Function Call)があるかチェック
             part_with_fc = next((p for p in response.parts if p.function_call), None)
             text_part = "".join([p.text for p in response.parts if not p.function_call])
 
-            # ★ツール呼び出しがない場合
+            # ★ツール呼び出しがない場合の「鬼軍曹」リトライロジック
             if not part_with_fc:
                 if text_part:
-                    # 偽コードや途中終了を検知
                     is_fake_code = "Action:" in text_part or "print(" in text_part or "browser_" in text_part
                     
+                    # 「偽コード」または「終わってないのにツールを呼ばない」場合
                     if is_fake_code or ("完了" not in text_part and "終了" not in text_part and i < 8):
-                        msg = "続きを"
-                        if is_fake_code:
-                            print(f"👮 [{current_channel}] 偽コード記述を検知。Tool使用を強制します。")
-                            msg = "テキストでコードを書くな。Function Call機能を使って実際に実行しろ。"
-                        else:
-                            print(f"👮 [{current_channel}] 連鎖中断を検知(Turn {i})。継続を要求します。")
-                            msg = "状況報告は不要。次のアクション（ツール実行）を直ちに行え。"
-
-                        history.append({"role": "model", "parts": [text_part]})
-                        history.append({"role": "user", "parts": [msg]})
+                        print(f"👮 [{current_channel}] ツール不使用を検知(Turn {i})。強制リトライを開始します。")
                         
-                        try:
-                            response = await asyncio.to_thread(chat.send_message, msg)
-                            if not response.candidates: break
-                            if not any(p.function_call for p in response.parts): break
-                            else: continue 
-                        except: break
+                        # 最大3回まで「ツールを使え」と叱り続ける
+                        retry_success = False
+                        current_text_part = text_part # ループ内で更新するために変数化
+                        
+                        for retry_count in range(3):
+                            msg = "続きを"
+                            if is_fake_code:
+                                msg = "【エラー】テキストで `Action:` と書くのは禁止です。Function Call機能を使ってください。"
+                            else:
+                                msg = "状況報告は不要。次のアクション（ツール実行）を直ちに行え。"
+
+                            # 履歴に「今のダメな回答」と「叱責」を追加
+                            history.append({"role": "model", "parts": [current_text_part]})
+                            history.append({"role": "user", "parts": [msg]})
+                            
+                            try:
+                                # 再生成
+                                response = await asyncio.to_thread(chat.send_message, msg)
+                                
+                                # 再生成結果のチェック
+                                if not response.candidates: break
+                                part_with_fc = next((p for p in response.parts if p.function_call), None)
+                                current_text_part = "".join([p.text for p in response.parts if not p.function_call])
+                                
+                                if part_with_fc:
+                                    retry_success = True
+                                    print(f"✅ [{current_channel}] リトライ成功。ツール実行へ移行します。")
+                                    break # 成功したのでリトライループを抜ける
+                                else:
+                                    print(f"⚠️ [{current_channel}] リトライ失敗({retry_count+1}/3)。まだテキストです...")
+                            except: break
+                        
+                        if not retry_success:
+                            print(f"❌ [{current_channel}] 3回試行しましたがツールを実行しませんでした。ループを終了します。")
+                            break 
                     else:
-                        break # 完了
+                        break # 「完了」等の言葉がある場合は正常終了
                 else:
                     break
 
@@ -765,8 +775,8 @@ async def process_command(command: str, current_channel: str):
                 fname, args = fc.name, fc.args
                 await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"🔧 {fname}...", "type": "thinking"}})
                 
-                # 実行
                 res = "Error"
+                # ツール実行マッピング
                 if fname == "read_github_content": res = await read_github_content(args.get("target_repo"), args.get("file_path"))
                 elif fname == "commit_github_fix": res = await commit_github_fix(args.get("target_repo"), args.get("file_path"), args.get("new_content"), args.get("commit_message"))
                 elif fname == "fetch_repo_structure": res = await fetch_repo_structure(args.get("target_repo"))
@@ -780,23 +790,24 @@ async def process_command(command: str, current_channel: str):
                 elif fname == "browser_scroll": res = await browser_scroll(args.get("direction"))
                 elif fname == "run_test_validation": res = await run_test_validation(args.get("target_file"), args.get("test_code"))
 
-                # 結果をAIに返す
                 role_res = {'result': str(res)}
                 if "Error" in str(res): role_res['result'] = f"ERROR: {str(res)}"
 
+                # 結果を返して次のターンへ
                 response = await asyncio.to_thread(chat.send_message, genai.protos.Content(
                     role='function', parts=[genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fname, response=role_res))]))
             else:
                 break
         
         # 8. 最終応答
-        if response.candidates:
+        if response and response.candidates:
             final_text = "".join([p.text for p in response.parts if not p.function_call])
             if final_text:
                 await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": final_text, "type": "gemini"}})
 
     except Exception as e:
         await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"Error: {e}", "type": "error"}})
+        
         
 # --- Model Init ---
 # 安全設定：意図的なブロックを防ぐため、すべてのフィルタをOFFにします
