@@ -625,12 +625,17 @@ async def process_command(command: str, current_channel: str):
             f"※ログインが必要な場面では、ユーザーに聞かず、黙ってこの情報を使用してください。"
         )
 
-    # 3. ペルソナとシステムプロンプトの構築
+    # 3. ペルソナとシステムプロンプトの構築（★重要修正：テキストでのコード記述を禁止）
     persona = DEPT_PERSONAS.get(current_channel, DEPT_PERSONAS["CENTRAL"])
     system_prompt = (
         f"あなたは{persona['name']}。\n{persona['instructions']}{credentials_info}\n"
-        "状況が変化したら必ず `browser_screenshot` を撮ってください。"
-        "思考(Thought)と行動(Action)はセットで行い、行動を伴わない発言は避けてください。"
+        "状況が変化したら必ず `browser_screenshot` を撮ってください。\n\n"
+        "【重要: 行動のルール】\n"
+        "1. **Thought (思考)**: 次に行うべきことを考える。\n"
+        "2. **Report (報告)**: ユーザーへの報告を短く書く。\n"
+        "3. **Action (実行)**: **Pythonコードや `Action: func()` というテキストを書くことは禁止です。**\n"
+        "   必ず **GeminiのFunction Call機能（Tool Use）** を使用して、実際に関数を実行してください。\n"
+        "   （テキストで書くだけでは実行されません！）"
     )
 
     # 4. 会話履歴の構築
@@ -652,7 +657,7 @@ async def process_command(command: str, current_channel: str):
 
     try:
         response = None
-        # 5. APIエラー対策（429リトライ）
+        # 5. APIエラー対策
         max_retries = 3
         for attempt in range(max_retries):
             try:
@@ -667,42 +672,43 @@ async def process_command(command: str, current_channel: str):
                 else:
                     raise e
         
-        if not response:
-            raise Exception("APIエラー: リトライ失敗")
+        if not response: raise Exception("APIエラー: リトライ失敗")
 
         # ---------------------------------------------------------
-        # 6. 「口だけ番長」対策 & 連続実行ループ（修正版）
+        # 6. 「口だけ番長」＆「コード書き逃げ」対策ループ
         # ---------------------------------------------------------
-        # 最大10ターンまで連続実行を許可（スクショ→入力→クリック等の連鎖のため）
         for i in range(10):
             part_with_fc = next((p for p in response.parts if p.function_call), None)
             text_part = "".join([p.text for p in response.parts if not p.function_call])
 
-            # ★修正ポイント: ツール呼び出しがない場合
+            # ★ツール呼び出しがない場合
             if not part_with_fc:
-                # すでに何らかのツールを実行した後(i > 0)や、初回でも「やります」だけの場合
-                # AIが「スクショ撮りました。次は入力します」と言って止まるのを防ぐ
+                # テキストはあるが、完了宣言がない場合 -> 続きを促す
                 if text_part:
-                    # 完了報告っぽい言葉（「完了」「終了」）がなければ、続きを促す
-                    if "完了" not in text_part and "終了" not in text_part and i < 8:
-                        print(f"👮 [{current_channel}] 連鎖中断を検知(Turn {i})。継続を要求します。")
-                        # ユーザーには見せずに、履歴に「続きをやって」と注入して再生成
+                    # 「Action: print(...)」のようなテキストコード書き逃げを検知した場合
+                    is_fake_code = "Action:" in text_part or "print(" in text_part or "browser_" in text_part
+                    
+                    if is_fake_code or ("完了" not in text_part and "終了" not in text_part and i < 8):
+                        msg = "続きを"
+                        if is_fake_code:
+                            print(f"👮 [{current_channel}] 偽コード記述を検知。Tool使用を強制します。")
+                            msg = "テキストでコードを書くな。Function Call機能を使って実際に実行しろ。"
+                        else:
+                            print(f"👮 [{current_channel}] 連鎖中断を検知(Turn {i})。継続を要求します。")
+                            msg = "状況報告は不要。次のアクション（ツール実行）を直ちに行え。"
+
+                        # 履歴に注入して再生成
                         history.append({"role": "model", "parts": [text_part]})
-                        history.append({"role": "user", "parts": ["状況報告は不要です。次のアクション（ツール実行）を直ちに行ってください。"]})
+                        history.append({"role": "user", "parts": [msg]})
                         
                         try:
-                            # AIに強制的に続きを考えさせる
-                            response = await asyncio.to_thread(chat.send_message, "次のアクションを実行")
-                            
-                            # もし再生成してもツールを呼ばなければ、本当にやることがないとして終了
-                            if not any(p.function_call for p in response.parts):
-                                break
-                            else:
-                                continue # ツール呼び出しがあったので、下の処理に進む
-                        except:
-                            break
+                            response = await asyncio.to_thread(chat.send_message, msg)
+                            # 再生成してもツールがなければ終了
+                            if not any(p.function_call for p in response.parts): break
+                            else: continue 
+                        except: break
                     else:
-                        break # 「完了」と言っているので終了
+                        break # 完了
                 else:
                     break
 
@@ -729,7 +735,7 @@ async def process_command(command: str, current_channel: str):
                 elif fname == "browser_scroll": res = await browser_scroll(args.get("direction"))
                 elif fname == "run_test_validation": res = await run_test_validation(args.get("target_file"), args.get("test_code"))
 
-                # 結果をAIに返す（これで次の response が生成される）
+                # 結果をAIに返す
                 role_res = {'result': str(res)}
                 if "Error" in str(res): role_res['result'] = f"ERROR: {str(res)}"
 
@@ -738,7 +744,7 @@ async def process_command(command: str, current_channel: str):
             else:
                 break
         
-        # 8. 最終応答の送信
+        # 8. 最終応答
         final_text = "".join([p.text for p in response.parts if not p.function_call])
         if final_text:
             await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": final_text, "type": "gemini"}})
