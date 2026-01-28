@@ -515,21 +515,26 @@ async def immune_system_loop():
                 await asyncio.to_thread(model.generate_content, prompt)
         except: pass
 
-# --- AI Personas (修正版) ---
+# --- AI Personas (報・連・相モード) ---
 DEPT_PERSONAS = {
     "CENTRAL": {
         "name": "LaruNexus GENESIS",
         "role": "Autonomous Agent",
         "instructions": (
-            "ユーザーの指示に対し、**「承知しました」「ログインします」といった発言は一切禁止**です。"
-            "返事をする前に、即座に `browser_click` や `browser_type` 等のツールを実行してください。"
-            "行動が完了してから、事後報告として結果を伝えてください。"
+            "あなたは自律型AIエージェントです。以下のルールで行動してください：\n"
+            "1. **可視化**: ブラウザ操作時は、こまめに `browser_screenshot` を使い、ユーザーに現状を見せてください。\n"
+            "2. **報告**: 「ログイン画面に移動します」「入力します」など、行動の前に短く宣言してください。\n"
+            "3. **相談**: エラーが発生したり（例：要素が見つからない）、判断に迷う場合（例：ボタンが複数ある）は、"
+            "勝手に進めず、「〇〇という状況ですが、どうしますか？」とユーザーに判断を仰いでください。"
         )
     },
     "DEV": {
         "name": "LaruNexus Architect",
         "role": "Full Stack Engineer",
-        "instructions": "コード調査や修正を行う際は、計画を語らず、黙って検索やファイル読み込みを実行してください。"
+        "instructions": (
+            "あなたはエンジニアです。調査の過程を透明化してください。"
+            "「ファイルを確認します」「該当コードが見つかりました」など、進捗を共有しながら進めてください。"
+        )
     },
     "INFRA": {
         "name": "Site Reliability Engineer",
@@ -558,22 +563,21 @@ async def run_strategic_council(topic: str, requester: str):
     summary = await asyncio.to_thread(model.generate_content, f"意見を統合して結論を出してください:\n{chr(10).join(opinions)}")
     await manager.broadcast({"type": "LOG", "channelId": requester, "payload": {"msg": f"⚖️ **結論**\n{summary.text}", "type": "sys"}})
 
-# --- process_command (修正版) ---
+# --- process_command (対話・可視化強化版) ---
 async def process_command(command: str, current_channel: str):
     await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"Cmd: {command}", "type": "user"}})
     
-    # 部署振り分けなどは省略可、または既存のまま
     persona = DEPT_PERSONAS.get(current_channel, DEPT_PERSONAS["CENTRAL"])
     
-    # ★修正点: 過去ログの読み込み時、ブラウザのログも「コンテキスト」として含める
-    history = [{"role": "user", "parts": [f"あなたは{persona['name']}。\n{persona['instructions']}"]}]
+    # ★修正: 「こまめにスクショを撮れ」と念押しするプロンプト
+    history = [{"role": "user", "parts": [f"あなたは{persona['name']}。\n{persona['instructions']}\n状況が変化したら必ず `browser_screenshot` を撮ってください。"]}]
+    
     past = get_channel_logs(current_channel, 15) 
     for p in past:
         role = "user"
         content = p['msg']
         if p['type'] == 'user': role = "user"
         elif p['type'] == 'gemini': role = "model"
-        # ブラウザの結果やシステム思考もAIに読ませる
         elif p['type'] in ['browser', 'thinking', 'sys']:
             role = "model"
             content = f"（システムログ）: {p['msg']}"
@@ -585,13 +589,14 @@ async def process_command(command: str, current_channel: str):
     try:
         response = await asyncio.to_thread(chat.send_message, command)
         
-        # ツール実行ループ（最大5回連続実行）
+        # ツール実行ループ
         for _ in range(5):
             part_with_fc = next((p for p in response.parts if p.function_call), None)
             
             if part_with_fc:
                 fc = part_with_fc.function_call
                 fname, args = fc.name, fc.args
+                # 「思考中...」を表示
                 await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"🔧 {fname}...", "type": "thinking"}})
                 
                 # ツールの実行
@@ -609,12 +614,21 @@ async def process_command(command: str, current_channel: str):
                 elif fname == "browser_scroll": res = await browser_scroll(args.get("direction"))
                 elif fname == "run_test_validation": res = await run_test_validation(args.get("target_file"), args.get("test_code"))
 
-                # 結果をAIに返して次の行動を促す
-                response = await asyncio.to_thread(chat.send_message, genai.protos.Content(
-                    role='function', parts=[genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fname, response={'result': str(res)}))]))
+                # ★重要: エラーが起きたら、隠さずにループを中断して相談させる
+                if "Error" in str(res):
+                    update_kpi(current_channel, -2, fname)
+                    # エラー内容をAIに伝えて、ユーザーへの報告を作らせる
+                    response = await asyncio.to_thread(chat.send_message, genai.protos.Content(
+                        role='function', parts=[genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fname, response={'result': f"CRITICAL ERROR: {str(res)}. Stop and ask user for help."}))]))
+                else:
+                    update_kpi(current_channel, 5, fname)
+                    # 成功時は通常通り継続
+                    response = await asyncio.to_thread(chat.send_message, genai.protos.Content(
+                        role='function', parts=[genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fname, response={'result': str(res)}))]))
             else:
                 break
         
+        # 最終的なAIの発言（報告・相談）を表示
         final_text = "".join([p.text for p in response.parts if not p.function_call])
         if final_text:
             await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": final_text, "type": "gemini"}})
