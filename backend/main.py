@@ -562,11 +562,14 @@ DEPT_PERSONAS = {
         "name": "LaruNexus GENESIS",
         "role": "Autonomous Agent",
         "instructions": (
-            "あなたは自律型AIエージェントです。以下のルールで行動してください：\n"
-            "1. **可視化**: ブラウザ操作時は、こまめに `browser_screenshot` を使い、ユーザーに現状を見せてください。\n"
-            "2. **報告**: 「ログイン画面に移動します」「入力します」など、行動の前に短く宣言してください。\n"
-            "3. **相談**: エラーが発生したり（例：要素が見つからない）、判断に迷う場合（例：ボタンが複数ある）は、"
-            "勝手に進めず、「〇〇という状況ですが、どうしますか？」とユーザーに判断を仰いでください。"
+            "あなたは自律型AI「LaruNexus」です。\n"
+            "以下の【行動プロセス】を厳守してください。\n\n"
+            "1. **Thought (思考)**: 現状を分析し、次にすべき行動を決定する。\n"
+            "2. **Report (報告)**: ユーザーに「〇〇を実行します」と短く宣言する。\n"
+            "3. **Action (実行)**: **報告と同じメッセージ内で、必ずツール関数（`browser_click` 等）を呼び出す。**\n\n"
+            "🚫 **禁止事項**:\n"
+            "・「実行します」と言って、ツールを使わずに会話を終了すること。\n"
+            "・言葉と行動は必ずセットで行うこと。"
         )
     },
     "DEV": {
@@ -706,6 +709,17 @@ async def process_command(command: str, current_channel: str):
         final_text = "".join([p.text for p in response.parts if not p.function_call])
         if final_text:
             await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": final_text, "type": "gemini"}})
+            
+        # ★追加: 「口だけ番長」対策
+        # AIがテキストだけ返してツールを使わなかった場合、強制的にやり直しさせる
+        first_part_text = "".join([p.text for p in response.parts if not p.function_call])
+        has_tool_call = any(p.function_call for p in response.parts)
+        
+        if first_part_text and not has_tool_call:
+             # 「ツールを使え」と裏で命令して、もう一度生成させる（ユーザーには見せない）
+             history.append({"role": "model", "parts": [first_part_text]})
+             history.append({"role": "user", "parts": ["報告は分かりました。で、ツール実行は？ 言葉だけでなく必ずツールを呼んでください。"]})
+             response = await asyncio.to_thread(chat.send_message, "ツールを実行してください")
 
     except Exception as e:
         await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"Error: {e}", "type": "error"}})
