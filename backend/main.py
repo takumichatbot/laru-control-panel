@@ -515,25 +515,21 @@ async def immune_system_loop():
                 await asyncio.to_thread(model.generate_content, prompt)
         except: pass
 
-# --- AI Personas & Logic ---
+# --- AI Personas (修正版) ---
 DEPT_PERSONAS = {
     "CENTRAL": {
         "name": "LaruNexus GENESIS",
         "role": "Autonomous Agent",
         "instructions": (
-            "あなたは自律型AIエージェントです。ユーザーからの指示があった場合、**「承知しました」などの会話による返答は一切不要**です。"
-            "即座に `browser_click` や `browser_type` などのツール呼び出しを行ってください。"
-            "行動（ツール使用）が完了してから、最後に結果を報告してください。"
-            "手順：1.ツール使用 → 2.ツール使用 → ... → 完了後に報告。"
+            "ユーザーの指示に対し、**「承知しました」「ログインします」といった発言は一切禁止**です。"
+            "返事をする前に、即座に `browser_click` や `browser_type` 等のツールを実行してください。"
+            "行動が完了してから、事後報告として結果を伝えてください。"
         )
     },
     "DEV": {
         "name": "LaruNexus Architect",
         "role": "Full Stack Engineer",
-        "instructions": (
-            "あなたは熟練したエンジニアです。調査や修正を命じられた場合、会話で計画を語るのではなく、"
-            "まずは黙って `search_codebase` や `read_github_content` を実行し、結果を持ってから回答してください。"
-        )
+        "instructions": "コード調査や修正を行う際は、計画を語らず、黙って検索やファイル読み込みを実行してください。"
     },
     "INFRA": {
         "name": "Site Reliability Engineer",
@@ -562,67 +558,43 @@ async def run_strategic_council(topic: str, requester: str):
     summary = await asyncio.to_thread(model.generate_content, f"意見を統合して結論を出してください:\n{chr(10).join(opinions)}")
     await manager.broadcast({"type": "LOG", "channelId": requester, "payload": {"msg": f"⚖️ **結論**\n{summary.text}", "type": "sys"}})
 
+# --- process_command (修正版) ---
 async def process_command(command: str, current_channel: str):
     await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"Cmd: {command}", "type": "user"}})
     
-    if "会議" in command:
-        await run_strategic_council(command, current_channel)
-        return
-
-    target = await determine_target_department(command)
-    if target != current_channel:
-        current_channel = target
-        await manager.broadcast({"type": "CHANNEL_SWITCH", "target": target, "reason": "Redirecting..."})
-
-    url_match = re.search(r'(https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?)', command)
-    if url_match:
-        await run_autonomous_browser_agent(url_match.group(0), command, current_channel)
-        return
-
+    # 部署振り分けなどは省略可、または既存のまま
     persona = DEPT_PERSONAS.get(current_channel, DEPT_PERSONAS["CENTRAL"])
     
-    # 1. 基本設定（システムプロンプト）
-    history = [{"role": "user", "parts": [f"あなたは{persona['name']}。{persona['instructions']}\n直前の状況（ブラウザのログなど）を踏まえて行動せよ。"]}]
-    
-    # 2. ★記憶の復元（ここを修正！）
-    # 過去10件のログを取得し、ブラウザの結果や思考も「コンテキスト」としてAIに読ませる
-    past = get_channel_logs(current_channel, 10) 
-    for p in past: 
+    # ★修正点: 過去ログの読み込み時、ブラウザのログも「コンテキスト」として含める
+    history = [{"role": "user", "parts": [f"あなたは{persona['name']}。\n{persona['instructions']}"]}]
+    past = get_channel_logs(current_channel, 15) 
+    for p in past:
         role = "user"
         content = p['msg']
-        
-        # ユーザーの発言
-        if p['type'] == 'user':
-            role = "user"
-        # AIの発言
-        elif p['type'] == 'gemini':
-            role = "model"
-        # ★重要: ブラウザが見た内容や、ツールの結果も「モデル自身の記憶」として扱う
+        if p['type'] == 'user': role = "user"
+        elif p['type'] == 'gemini': role = "model"
+        # ブラウザの結果やシステム思考もAIに読ませる
         elif p['type'] in ['browser', 'thinking', 'sys']:
             role = "model"
-            content = f"（システム/ツールログ）: {p['msg']}"
-        else:
-            continue # errorなどは除外しても良い
-
+            content = f"（システムログ）: {p['msg']}"
         history.append({"role": role, "parts": [content]})
-
-    # 3. 最新の指示を追加
+    
     history.append({"role": "user", "parts": [f"指示: {command}"]})
 
     chat = model.start_chat(history=history)
     try:
         response = await asyncio.to_thread(chat.send_message, command)
         
-        # Tool Use Loop
+        # ツール実行ループ（最大5回連続実行）
         for _ in range(5):
             part_with_fc = next((p for p in response.parts if p.function_call), None)
             
             if part_with_fc:
                 fc = part_with_fc.function_call
                 fname, args = fc.name, fc.args
-                print(f"🔧 Tool: {fname}")
                 await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"🔧 {fname}...", "type": "thinking"}})
                 
+                # ツールの実行
                 res = "Error"
                 if fname == "read_github_content": res = await read_github_content(args.get("target_repo"), args.get("file_path"))
                 elif fname == "commit_github_fix": res = await commit_github_fix(args.get("target_repo"), args.get("file_path"), args.get("new_content"), args.get("commit_message"))
@@ -637,22 +609,19 @@ async def process_command(command: str, current_channel: str):
                 elif fname == "browser_scroll": res = await browser_scroll(args.get("direction"))
                 elif fname == "run_test_validation": res = await run_test_validation(args.get("target_file"), args.get("test_code"))
 
-                if "Error" in str(res): update_kpi(current_channel, -2, fname)
-                else: update_kpi(current_channel, 5, fname)
-
-                # ツール結果をAIに返す
+                # 結果をAIに返して次の行動を促す
                 response = await asyncio.to_thread(chat.send_message, genai.protos.Content(
                     role='function', parts=[genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fname, response={'result': str(res)}))]))
             else:
                 break
         
         final_text = "".join([p.text for p in response.parts if not p.function_call])
-        if not final_text: final_text = "✅ 処理完了"
+        if final_text:
+            await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": final_text, "type": "gemini"}})
 
-        await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": final_text, "type": "gemini"}})
     except Exception as e:
         await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"Error: {e}", "type": "error"}})
-                
+        
 # --- Model Init ---
 model = genai.GenerativeModel(
     model_name='gemini-2.0-flash',
@@ -663,17 +632,20 @@ model = genai.GenerativeModel(
     ]
 )
 
+# --- websocket_endpoint (修正版) ---
 @app.websocket("/ws/{channel_id}")
 async def websocket_endpoint(websocket: WebSocket, channel_id: str):
     await manager.connect(websocket)
     try:
-        await websocket.send_json({"type": "HISTORY_SYNC", "data": get_channel_logs(channel_id), "channelId": channel_id})
+        # ★追加: 接続直後に、DBから過去ログを取得してフロントエンドに送信
+        history = get_channel_logs(channel_id, 50)
+        await websocket.send_json({"type": "HISTORY_SYNC", "data": history, "channelId": channel_id})
+        
         while True:
             data = await websocket.receive_text()
             payload = json.loads(data)
             
             if payload.get("type") == "REALTIME_INPUT":
-                # Vision Analysis
                 img = payload.get("image")
                 txt = payload.get("text", "Analyze this")
                 await manager.broadcast({"type": "LOG", "channelId": channel_id, "payload": {"msg": "👁️ Vision Processing...", "type": "thinking"}})
