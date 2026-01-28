@@ -424,34 +424,56 @@ async def browser_screenshot():
             # 2. ページのテキスト取得
             text = await phantom_browser.page.inner_text('body')
             
-            # 3. リンク・ボタン抽出 (JavaScriptの修正版)
-            # Pythonの # コメントはJSではエラーになるため削除しました
+            # 3. リンク・ボタン・入力フォーム抽出 (JavaScriptの強化版)
+            # ★修正箇所: inputタグの name, id, placeholder, type を取得するように変更
             interactive_elements = await phantom_browser.page.evaluate('''() => {
-                const elements = Array.from(document.querySelectorAll('a, button, input[type="submit"], input[type="button"]'));
+                const elements = Array.from(document.querySelectorAll('a, button, input, textarea, select'));
                 return elements
-                    .filter(el => el.innerText.trim().length > 0 && el.offsetParent !== null)
-                    .slice(0, 50)
+                    .filter(el => {
+                        // 見えている、かつ操作可能な要素のみ
+                        const style = window.getComputedStyle(el);
+                        return style.display !== 'none' && style.visibility !== 'hidden' && !el.disabled;
+                    })
+                    .slice(0, 100)
                     .map(el => {
-                        let t = el.innerText.trim().replace(/\\n/g, ' ');
-                        let h = el.getAttribute('href') || 'button';
-                        return `[${t}] -> ${h}`;
+                        let tagName = el.tagName.toLowerCase();
+                        let t = el.innerText ? el.innerText.trim().replace(/\\n/g, ' ') : '';
+                        
+                        // input要素の場合、属性情報を詳しく取得
+                        let attrs = [];
+                        if (tagName === 'input' || tagName === 'textarea') {
+                            if (el.type) attrs.push(`type="${el.type}"`);
+                            if (el.name) attrs.push(`name="${el.name}"`);
+                            if (el.id) attrs.push(`id="${el.id}"`);
+                            if (el.placeholder) attrs.push(`placeholder="${el.placeholder}"`);
+                            if (el.value) attrs.push(`value="${el.value}"`);
+                            t = `[INPUT] ${t}`; // 識別しやすくする
+                        } else {
+                            // リンクやボタン
+                            let href = el.getAttribute('href');
+                            if (href) attrs.push(`href="${href}"`);
+                        }
+                        
+                        let attrStr = attrs.length > 0 ? `(${attrs.join(', ')})` : '';
+                        return `${t} ${attrStr}`; 
                     });
             }''')
             
             links_summary = "\n".join(interactive_elements)
             
             return f"""
-Snapshot taken.
+Snapshot taken. (Note: Fonts may be missing in the screenshot)
+
+=== Interactive Elements (Detailed) ===
+{links_summary}
 
 === Page Text (Summary) ===
 {text[:2000]}...
-
-=== Interactive Elements (Clickable) ===
-{links_summary}
             """
         except Exception as e:
-            print(f"Screenshot Error: {e}") # ログにエラーを出す
+            print(f"Screenshot Error: {e}") 
             return f"Shot Error: {e}"
+        
 
 async def browser_click(target: str):
     async with phantom_browser.lock:
