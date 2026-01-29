@@ -663,18 +663,18 @@ async def process_command(command: str, current_channel: str):
             f"※ログインが必要な場面では、ユーザーに聞かず、黙ってこの情報を使用してください。"
         )
 
-    # 3. ペルソナとシステムプロンプト（テキスト禁止をさらに強調）
+    # 3. ペルソナとシステムプロンプト
     persona = DEPT_PERSONAS.get(current_channel, DEPT_PERSONAS["CENTRAL"])
     system_prompt = (
         f"あなたは{persona['name']}。\n{persona['instructions']}{credentials_info}\n\n"
         "【重要: 環境制約】\n"
-        "サーバー側のフォント欠落により、文字は「□□□」になります。\n"
-        "必ず `browser_screenshot` の結果にある **「Interactive Elements」の `id`, `class`, `href`, `name`** を見て操作してください。\n\n"
+        "サーバー側のフォント欠落により、文字は「□□□」になる可能性があります。\n"
+        "必ず `browser_screenshot` の結果にある **「Interactive Elements」の `type`, `id`, `class`, `name`** を見て操作してください。\n"
+        "特にログインボタンは `type='submit'` や `class` 属性に注目して特定してください。\n\n"
         "【重要: 行動ルール】\n"
         "1. **Report**: 報告は短く。\n"
         "2. **Action**: `Action: browser_click()` のような**テキストを回答に含めることは厳禁**です。\n"
-        "   テキストではなく、必ず **GeminiのFunction Call機能** を実体として呼び出してください。\n"
-        "   （テキストで書くとエラーになります！）"
+        "   テキストではなく、必ず **GeminiのFunction Call機能** を実体として呼び出してください。"
     )
 
     # 4. 履歴構築
@@ -696,25 +696,31 @@ async def process_command(command: str, current_channel: str):
 
     try:
         response = None
-        # 5. 初回リクエスト（APIエラーリトライ付き）
+        # 5. 初回リクエスト（APIエラーリトライ付き・防御力強化版）
         for attempt in range(3):
             try:
                 response = await asyncio.to_thread(chat.send_message, command)
-                if not response.candidates: raise Exception("Safety Block")
+                # ★修正: candidatesが空、またはアクセスできない場合はエラーとして扱いリトライさせる
+                if not response.candidates: 
+                    raise Exception("Empty Response (Safety Block or API Glitch)")
                 break 
             except Exception as e:
-                if "Safety" in str(e): raise e
-                await asyncio.sleep((attempt + 1) * 5)
+                # list index out of range もここでキャッチしてリトライに回す
+                print(f"⚠️ API Error (Attempt {attempt+1}): {e}")
+                await asyncio.sleep((attempt + 1) * 2) # 少し待つ
         
-        if not response: raise Exception("API Error")
+        # 3回やってもダメなら、エラーではなく「諦め」を返す（サーバーを落とさないため）
+        if not response or not response.candidates:
+            await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": "⚠️ AIが応答を拒否しました（セキュリティフィルタの可能性）。指示の言い方を変えてみてください。", "type": "error"}})
+            return
 
         # ---------------------------------------------------------
         # 6. 実行ループ（最大10ターン）
         # ---------------------------------------------------------
         for i in range(10):
+            # 念のためここでもチェック
             if not response.candidates: break
 
-            # ツール呼び出し(Function Call)があるかチェック
             part_with_fc = next((p for p in response.parts if p.function_call), None)
             text_part = "".join([p.text for p in response.parts if not p.function_call])
 
@@ -723,47 +729,38 @@ async def process_command(command: str, current_channel: str):
                 if text_part:
                     is_fake_code = "Action:" in text_part or "print(" in text_part or "browser_" in text_part
                     
-                    # 「偽コード」または「終わってないのにツールを呼ばない」場合
                     if is_fake_code or ("完了" not in text_part and "終了" not in text_part and i < 8):
-                        print(f"👮 [{current_channel}] ツール不使用を検知(Turn {i})。強制リトライを開始します。")
+                        print(f"👮 [{current_channel}] ツール不使用を検知(Turn {i})。強制リトライ。")
                         
-                        # 最大3回まで「ツールを使え」と叱り続ける
                         retry_success = False
-                        current_text_part = text_part # ループ内で更新するために変数化
+                        current_text_part = text_part 
                         
                         for retry_count in range(3):
                             msg = "続きを"
                             if is_fake_code:
-                                msg = "【エラー】テキストで `Action:` と書くのは禁止です。Function Call機能を使ってください。"
+                                msg = "【エラー】テキストで `Action:` と書くのは禁止。Function Callを使え。"
                             else:
                                 msg = "状況報告は不要。次のアクション（ツール実行）を直ちに行え。"
 
-                            # 履歴に「今のダメな回答」と「叱責」を追加
                             history.append({"role": "model", "parts": [current_text_part]})
                             history.append({"role": "user", "parts": [msg]})
                             
                             try:
-                                # 再生成
                                 response = await asyncio.to_thread(chat.send_message, msg)
-                                
-                                # 再生成結果のチェック
                                 if not response.candidates: break
+                                
                                 part_with_fc = next((p for p in response.parts if p.function_call), None)
                                 current_text_part = "".join([p.text for p in response.parts if not p.function_call])
                                 
                                 if part_with_fc:
                                     retry_success = True
-                                    print(f"✅ [{current_channel}] リトライ成功。ツール実行へ移行します。")
-                                    break # 成功したのでリトライループを抜ける
-                                else:
-                                    print(f"⚠️ [{current_channel}] リトライ失敗({retry_count+1}/3)。まだテキストです...")
+                                    print(f"✅ [{current_channel}] リトライ成功。")
+                                    break 
                             except: break
                         
-                        if not retry_success:
-                            print(f"❌ [{current_channel}] 3回試行しましたがツールを実行しませんでした。ループを終了します。")
-                            break 
+                        if not retry_success: break 
                     else:
-                        break # 「完了」等の言葉がある場合は正常終了
+                        break # 「完了」
                 else:
                     break
 
