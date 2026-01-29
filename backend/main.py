@@ -694,31 +694,42 @@ async def process_command(command: str, current_channel: str):
 
     chat = model.start_chat(history=history)
 
-    try:
-        response = None
-        # 5. 初回リクエスト（APIエラーリトライ付き・防御力強化版）
-        for attempt in range(3):
+    # ★ここが新機能: 安全に送信し、エラーなら自動リトライする内部関数
+    async def safe_send_message(content_to_send):
+        max_retries = 3
+        for attempt in range(max_retries):
             try:
-                response = await asyncio.to_thread(chat.send_message, command)
-                # ★修正: candidatesが空、またはアクセスできない場合はエラーとして扱いリトライさせる
-                if not response.candidates: 
-                    raise Exception("Empty Response (Safety Block or API Glitch)")
-                break 
+                # 送信
+                response = await asyncio.to_thread(chat.send_message, content_to_send)
+                
+                # 安全チェック（ここで list index out of range を防ぐ）
+                if not response.candidates:
+                    print(f"⚠️ [Attempt {attempt+1}] Blocked/Empty Response.")
+                    raise Exception("Safety Block or Empty Response")
+                
+                # 念のためpartsアクセスもチェック
+                _ = response.parts 
+                
+                return response
             except Exception as e:
-                # list index out of range もここでキャッチしてリトライに回す
-                print(f"⚠️ API Error (Attempt {attempt+1}): {e}")
+                print(f"🔄 Retry ({attempt+1}/{max_retries}): {e}")
                 await asyncio.sleep((attempt + 1) * 2) # 少し待つ
         
-        # 3回やってもダメなら、エラーではなく「諦め」を返す（サーバーを落とさないため）
-        if not response or not response.candidates:
-            await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": "⚠️ AIが応答を拒否しました（セキュリティフィルタの可能性）。指示の言い方を変えてみてください。", "type": "error"}})
+        # 3回失敗したらNoneを返す
+        return None
+
+    try:
+        # 5. 初回リクエスト（安全関数を使用）
+        response = await safe_send_message(command)
+        
+        if not response:
+            await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": "⚠️ AIが応答を拒否しました（セキュリティ保護のため）。パスワード等を直接入力せず、設定機能の利用を検討してください。", "type": "error"}})
             return
 
         # ---------------------------------------------------------
         # 6. 実行ループ（最大10ターン）
         # ---------------------------------------------------------
         for i in range(10):
-            # 念のためここでもチェック
             if not response.candidates: break
 
             part_with_fc = next((p for p in response.parts if p.function_call), None)
@@ -735,7 +746,7 @@ async def process_command(command: str, current_channel: str):
                         retry_success = False
                         current_text_part = text_part 
                         
-                        for retry_count in range(3):
+                        for retry_count in range(2): # 叱責リトライ回数
                             msg = "続きを"
                             if is_fake_code:
                                 msg = "【エラー】テキストで `Action:` と書くのは禁止。Function Callを使え。"
@@ -745,18 +756,16 @@ async def process_command(command: str, current_channel: str):
                             history.append({"role": "model", "parts": [current_text_part]})
                             history.append({"role": "user", "parts": [msg]})
                             
-                            try:
-                                response = await asyncio.to_thread(chat.send_message, msg)
-                                if not response.candidates: break
-                                
-                                part_with_fc = next((p for p in response.parts if p.function_call), None)
-                                current_text_part = "".join([p.text for p in response.parts if not p.function_call])
-                                
-                                if part_with_fc:
-                                    retry_success = True
-                                    print(f"✅ [{current_channel}] リトライ成功。")
-                                    break 
-                            except: break
+                            # リトライ送信も安全関数で行う
+                            response = await safe_send_message(msg)
+                            if not response: break
+                            
+                            part_with_fc = next((p for p in response.parts if p.function_call), None)
+                            current_text_part = "".join([p.text for p in response.parts if not p.function_call])
+                            
+                            if part_with_fc:
+                                retry_success = True
+                                break 
                         
                         if not retry_success: break 
                     else:
@@ -773,7 +782,7 @@ async def process_command(command: str, current_channel: str):
                 await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"🔧 {fname}...", "type": "thinking"}})
                 
                 res = "Error"
-                # ツール実行マッピング
+                # ツール実行
                 if fname == "read_github_content": res = await read_github_content(args.get("target_repo"), args.get("file_path"))
                 elif fname == "commit_github_fix": res = await commit_github_fix(args.get("target_repo"), args.get("file_path"), args.get("new_content"), args.get("commit_message"))
                 elif fname == "fetch_repo_structure": res = await fetch_repo_structure(args.get("target_repo"))
@@ -790,9 +799,11 @@ async def process_command(command: str, current_channel: str):
                 role_res = {'result': str(res)}
                 if "Error" in str(res): role_res['result'] = f"ERROR: {str(res)}"
 
-                # 結果を返して次のターンへ
-                response = await asyncio.to_thread(chat.send_message, genai.protos.Content(
+                # ★修正: ツール結果の送信も安全関数を使う（ここが一番重要）
+                response = await safe_send_message(genai.protos.Content(
                     role='function', parts=[genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fname, response=role_res))]))
+                
+                if not response: break # エラーならループ終了
             else:
                 break
         
@@ -804,7 +815,6 @@ async def process_command(command: str, current_channel: str):
 
     except Exception as e:
         await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"Error: {e}", "type": "error"}})
-        
         
 # --- Model Init ---
 # 安全設定：意図的なブロックを防ぐため、すべてのフィルタをOFFにします
