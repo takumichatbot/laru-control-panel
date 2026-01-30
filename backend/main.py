@@ -516,6 +516,76 @@ async def browser_scroll(direction: str):
             await phantom_browser.page.evaluate(f"window.scrollBy(0, {y})")
             return f"Scrolled {direction}"
         except Exception as e: return f"Scroll Error: {e}"
+        
+async def perform_login(url: str, email: str, password: str):
+    """
+    指定されたURLでメールアドレスとパスワードを入力し、ログインボタンを押す一括操作ツール
+    """
+    async with phantom_browser.lock:
+        if not phantom_browser.page: await phantom_browser.start()
+        page = phantom_browser.page
+        try:
+            print(f"🔐 Auto-Login started for {url}")
+            # 1. ページ移動
+            await page.goto(url, timeout=30000)
+            await asyncio.sleep(2)
+
+            # 2. メールアドレス入力欄を探して入力
+            # (name属性, type属性, placeholderなどから必死に探すロジック)
+            email_selectors = [
+                'input[type="email"]', 'input[name*="email"]', 'input[name*="user"]', 'input[id*="email"]', 
+                'input[placeholder*="Email"]', 'input[placeholder*="メール"]'
+            ]
+            email_filled = False
+            for sel in email_selectors:
+                if await page.query_selector(sel):
+                    await page.fill(sel, email)
+                    email_filled = True
+                    print(f"  - Email filled into '{sel}'")
+                    break
+            
+            if not email_filled: return "Error: Could not find Email input field."
+
+            # 3. パスワード入力欄を探して入力
+            pass_selectors = [
+                'input[type="password"]', 'input[name*="pass"]', 'input[id*="pass"]', 
+                'input[placeholder*="Password"]', 'input[placeholder*="パスワード"]'
+            ]
+            pass_filled = False
+            for sel in pass_selectors:
+                if await page.query_selector(sel):
+                    await page.fill(sel, password)
+                    pass_filled = True
+                    print(f"  - Password filled into '{sel}'")
+                    break
+            
+            if not pass_filled: return "Error: Could not find Password input field."
+
+            # 4. ログインボタン（Submit）を押す
+            # type="submit" を優先的に探す
+            btn_selectors = [
+                'button[type="submit"]', 'input[type="submit"]', 
+                'button[class*="login"]', 'a[class*="login"]',
+                'button:has-text("Login")', 'button:has-text("ログイン")'
+            ]
+            clicked = False
+            for sel in btn_selectors:
+                if await page.query_selector(sel):
+                    # SPA対応: クリックして少し待つ
+                    await page.click(sel)
+                    clicked = True
+                    print(f"  - Clicked login button '{sel}'")
+                    break
+            
+            if not clicked: return "Error: Could not find Login button."
+
+            # 5. 完了待ち（画面遷移を確認）
+            await asyncio.sleep(3)
+            title = await page.title()
+            return f"✅ Login Action Completed. Current Page Title: {title}"
+
+        except Exception as e:
+            return f"Login Failed: {str(e)}"
 
 async def run_autonomous_browser_agent(url: str, task_description: str, channel_id: str):
     await manager.broadcast({"type": "LOG", "channelId": channel_id, "payload": {"msg": f"🌐 潜入開始: {url}", "type": "thinking"}})
@@ -786,6 +856,7 @@ async def process_command(command: str, current_channel: str):
                 if fname == "read_github_content": res = await read_github_content(args.get("target_repo"), args.get("file_path"))
                 elif fname == "commit_github_fix": res = await commit_github_fix(args.get("target_repo"), args.get("file_path"), args.get("new_content"), args.get("commit_message"))
                 elif fname == "fetch_repo_structure": res = await fetch_repo_structure(args.get("target_repo"))
+                elif fname == "perform_login": res = await perform_login(args.get("url"), args.get("email"), args.get("password"))
                 elif fname == "search_codebase": res = await search_codebase(args.get("target_repo"), args.get("query"))
                 elif fname == "check_render_status": res = await check_render_status()
                 elif fname == "run_terminal_command": res = await run_terminal_command(args.get("command"))
@@ -829,6 +900,7 @@ model = genai.GenerativeModel(
     model_name='gemini-2.0-flash',
     safety_settings=safety_settings,  # ★ここを追加
     tools=[
+        perform_login,
         commit_github_fix, read_github_content, fetch_repo_structure, search_codebase,
         check_render_status, run_terminal_command, run_test_validation,
         browser_navigate, browser_screenshot, browser_click, browser_type, browser_scroll
