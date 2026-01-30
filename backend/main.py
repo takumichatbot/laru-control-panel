@@ -232,23 +232,106 @@ async def send_discord_alert(title: str, description: str, color: int = 0x00ff00
 # --- Database ---
 DB_PATH = "/opt/render/project/src/nexus_genesis.db" if os.getenv("RENDER") else "nexus_genesis.db"
 
+# 既存の init_db を更新（テーブル追加）
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    # ログテーブル
+    # 既存テーブル
     c.execute('''CREATE TABLE IF NOT EXISTS logs
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, channel_id TEXT, timestamp TEXT, msg TEXT, type TEXT, image_url TEXT)''')
-    # KPIテーブル
     c.execute('''CREATE TABLE IF NOT EXISTS kpi_scores
                  (dept TEXT PRIMARY KEY, score INTEGER, streak INTEGER, last_eval TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS project_settings
-                     (project_id TEXT PRIMARY KEY, email TEXT, password TEXT, login_type TEXT, memo TEXT)''')
+                 (project_id TEXT PRIMARY KEY, email TEXT, password TEXT, login_type TEXT, memo TEXT)''')
+    
+    # ★追加: ミッション管理テーブル（AIの長期記憶）
+    c.execute('''CREATE TABLE IF NOT EXISTS missions
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                  channel_id TEXT, 
+                  main_goal TEXT, 
+                  sub_tasks TEXT, 
+                  current_step_index INTEGER, 
+                  status TEXT, 
+                  memory TEXT,
+                  updated_at TEXT)''')
     
     depts = ["CENTRAL", "DEV", "TRADING", "INFRA"]
     for d in depts:
         c.execute("INSERT OR IGNORE INTO kpi_scores (dept, score, streak, last_eval) VALUES (?, 50, 0, ?)", (d, datetime.now().isoformat()))
     conn.commit()
     conn.close()
+
+# ★追加: ミッション管理ツール関数
+async def manage_mission(action: str, channel_id: str, data: str = ""):
+    """
+    AIが自身の長期タスクを管理するためのツール。
+    action:
+      - "create": 新しい目標を設定 (dataに目標記述)
+      - "add_tasks": タスクリストを設定 (dataにカンマ区切りでタスク記述)
+      - "update_step": 現在の進捗を更新 (dataにステップ番号 '0', '1'...)
+      - "save_memo": 重要な情報をメモする (dataに追記するテキスト)
+      - "complete": ミッション完了 (dataは空でOK)
+      - "read": 現在のミッション状態を読み取る (dataは空でOK)
+    """
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    try:
+        # 現在のアクティブなミッションを取得
+        c.execute("SELECT id, main_goal, sub_tasks, current_step_index, memory FROM missions WHERE channel_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1", (channel_id,))
+        row = c.fetchone()
+        
+        if action == "create":
+            if row: # 既存があれば中断(aborted)扱いにする
+                c.execute("UPDATE missions SET status = 'aborted' WHERE id = ?", (row[0],))
+            c.execute("INSERT INTO missions (channel_id, main_goal, sub_tasks, current_step_index, status, memory, updated_at) VALUES (?, ?, '[]', 0, 'active', '', ?)", 
+                      (channel_id, data, datetime.now().isoformat()))
+            conn.commit()
+            return f"✅ New Mission Started: {data}"
+
+        if not row: return "Error: No active mission found. Use 'create' action first."
+        mid, goal, tasks_json, step, memory = row
+        tasks = json.loads(tasks_json) if tasks_json else []
+
+        if action == "add_tasks":
+            # カンマ区切りなどで来る可能性があるため整形
+            new_tasks = [t.strip() for t in data.split(",") if t.strip()]
+            c.execute("UPDATE missions SET sub_tasks = ?, updated_at = ? WHERE id = ?", 
+                      (json.dumps(new_tasks), datetime.now().isoformat(), mid))
+            return f"✅ Tasks Updated: {new_tasks}"
+
+        elif action == "update_step":
+            try:
+                new_step = int(data)
+                task_name = tasks[new_step] if len(tasks) > new_step else "Unknown"
+                c.execute("UPDATE missions SET current_step_index = ?, updated_at = ? WHERE id = ?", (new_step, datetime.now().isoformat(), mid))
+                return f"✅ Moved to step {new_step}: {task_name}"
+            except: return "Error: Invalid step number"
+
+        elif action == "save_memo":
+            timestamp = datetime.now().strftime("%H:%M")
+            new_entry = f"[{timestamp}] {data}"
+            new_memory = (memory + "\n" + new_entry).strip()
+            c.execute("UPDATE missions SET memory = ?, updated_at = ? WHERE id = ?", (new_memory, datetime.now().isoformat(), mid))
+            return "✅ Memo Saved."
+
+        elif action == "complete":
+            c.execute("UPDATE missions SET status = 'completed', updated_at = ? WHERE id = ?", (datetime.now().isoformat(), mid))
+            return "🎉 Mission Completed!"
+
+        elif action == "read":
+            current_task = tasks[step] if len(tasks) > step else "None"
+            return f"""
+=== 📋 CURRENT MISSION STATUS ===
+Goal: {goal}
+Current Step [{step}]: {current_task}
+Tasks List: {tasks}
+---------------------------------
+[MEMORY / NOTES]
+{memory}
+=================================
+"""
+    except Exception as e: return f"Mission DB Error: {e}"
+    finally: conn.close()
 
 def update_kpi(dept: str, points: int, reason: str):
     try:
@@ -413,82 +496,120 @@ async def browser_screenshot():
     async with phantom_browser.lock:
         if not phantom_browser.page: return "Error: Browser not open."
         try:
-            # ページが完全に描画されるのを少し待つ（SPA対策）
+            # ページがロードされるのを待つ
             await asyncio.sleep(1)
             
-            # 1. スクリーンショット撮影
-            screenshot_bytes = await phantom_browser.page.screenshot(type='jpeg', quality=60)
-            img_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
-            await manager.broadcast({
-                "type": "LOG", "channelId": "DEV", 
-                "payload": {"msg": "📸 Screen Capture", "type": "browser", "imageUrl": f"data:image/jpeg;base64,{img_b64}"}
-            })
-            
-            # 2. ページのテキスト取得
-            text = await phantom_browser.page.inner_text('body')
-            
-            # 3. 操作可能要素の完全解析 (JS強化版)
-            # class, id, href, aria-label, placeholder を全て取得してAIに渡す
-            interactive_elements = await phantom_browser.page.evaluate('''() => {
-                const elements = Array.from(document.querySelectorAll('a, button, input, textarea, select, [role="button"]'));
-                return elements
-                    .filter(el => {
-                        const style = window.getComputedStyle(el);
-                        return style.display !== 'none' && style.visibility !== 'hidden' && !el.disabled;
-                    })
-                    .slice(0, 150) // 取得数を増やす
-                    .map(el => {
-                        let tagName = el.tagName.toLowerCase();
-                        let t = el.innerText ? el.innerText.trim().replace(/\\n/g, ' ') : '';
-                        if (t.length > 20) t = t.substring(0, 20) + "..."; // 長すぎるテキストはカット
-                        
-                        let attrs = [];
-                        
-                        // IDとClassは重要
-                        if (el.id) attrs.push(`id="${el.id}"`);
-                        if (el.className && typeof el.className === 'string') attrs.push(`class="${el.className}"`);
-                        
-                        // リンク先
-                        let href = el.getAttribute('href');
-                        if (href) attrs.push(`href="${href}"`);
-                        
-                        // アクセシビリティ情報
-                        let aria = el.getAttribute('aria-label');
-                        if (aria) attrs.push(`aria-label="${aria}"`);
-                        
-                        // 入力フォーム情報
-                        if (tagName === 'input' || tagName === 'textarea') {
-                            if (el.type) attrs.push(`type="${el.type}"`);
-                            if (el.name) attrs.push(`name="${el.name}"`);
-                            if (el.placeholder) attrs.push(`placeholder="${el.placeholder}"`);
-                            t = `[INPUT]`; // 入力欄であることを強調
-                        } else if (tagName === 'a') {
-                            t = `[LINK] ${t}`;
-                        } else {
-                            t = `[BTN] ${t}`;
-                        }
-                        
-                        let attrStr = attrs.length > 0 ? ` (${attrs.join(', ')})` : '';
-                        return `${t}${attrStr}`; 
-                    });
+            # JS注入: 操作可能要素に「data-laru-id」と「視覚タグ」を付与
+            visual_map = await phantom_browser.page.evaluate('''() => {
+                // 既存のタグをクリア
+                document.querySelectorAll('.laru-tag').forEach(e => e.remove());
+                
+                // 操作可能な要素を抽出
+                const elements = Array.from(document.querySelectorAll('a, button, input, textarea, select, [role="button"], [onclick]'));
+                
+                // 画面内に見えているものだけに絞る
+                const visibleElements = elements.filter(el => {
+                    const rect = el.getBoundingClientRect();
+                    const style = window.getComputedStyle(el);
+                    return style.display !== 'none' && style.visibility !== 'hidden' && !el.disabled &&
+                           rect.width > 0 && rect.height > 0 &&
+                           rect.top >= 0 && rect.left >= 0 &&
+                           rect.bottom <= window.innerHeight && rect.right <= window.innerWidth;
+                }).slice(0, 60); // トークン節約のため最大60個
+
+                const map = [];
+                visibleElements.forEach((el, index) => {
+                    const id = index + 1;
+                    
+                    // 1. 要素自体にID属性を付与（クリック用）
+                    el.setAttribute('data-laru-id', id);
+                    
+                    // 2. 視覚的タグ（赤枠と番号）を作成（AI認識用）
+                    const rect = el.getBoundingClientRect();
+                    const tag = document.createElement('div');
+                    tag.className = 'laru-tag';
+                    tag.innerText = id;
+                    tag.style.position = 'fixed';
+                    tag.style.left = rect.left + 'px';
+                    tag.style.top = Math.max(0, rect.top - 20) + 'px'; // 要素の少し上に表示
+                    tag.style.backgroundColor = '#ff0000';
+                    tag.style.color = 'white';
+                    tag.style.fontSize = '14px';
+                    tag.style.fontWeight = 'bold';
+                    tag.style.padding = '2px 6px';
+                    tag.style.borderRadius = '4px';
+                    tag.style.zIndex = '2147483647'; // 最大値
+                    tag.style.pointerEvents = 'none';
+                    tag.style.boxShadow = '0 2px 4px rgba(0,0,0,0.5)';
+                    document.body.appendChild(tag);
+                    
+                    // 3. マップ情報の作成
+                    let text = el.innerText ? el.innerText.substring(0, 30).replace(/\\n/g, '') : '';
+                    if (!text && el.placeholder) text = `[Input] ${el.placeholder}`;
+                    if (!text && el.value) text = `[Value] ${el.value}`;
+                    if (!text && el.ariaLabel) text = el.ariaLabel;
+                    
+                    let tagName = el.tagName.toLowerCase();
+                    map.push(`ID [${id}]: <${tagName}> ${text}`);
+                });
+                return map;
             }''')
             
-            links_summary = "\n".join(interactive_elements)
+            # タグ描画待ち
+            await asyncio.sleep(0.5)
+            
+            # スクリーンショット撮影
+            screenshot_bytes = await phantom_browser.page.screenshot(type='jpeg', quality=70)
+            img_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
+            
+            # 視覚タグ（赤箱）だけ削除（画面が汚れないように）。data-laru-idは残す。
+            await phantom_browser.page.evaluate("document.querySelectorAll('.laru-tag').forEach(e => e.remove())")
+            
+            # フロントエンドへ送信
+            await manager.broadcast({
+                "type": "LOG", "channelId": "DEV", 
+                "payload": {"msg": "📸 Visual Targeting Active", "type": "browser", "imageUrl": f"data:image/jpeg;base64,{img_b64}"}
+            })
+            
+            map_text = "\n".join(visual_map)
             
             return f"""
-Snapshot taken. 
-⚠️ WARNING: Fonts are broken on the server. Text may appear as '□□□'.
-You MUST rely on the 'Interactive Elements' list below. Look for 'class', 'id', 'href', or 'name' attributes containing keywords like "login", "signin", "email", "user".
+IMAGE CAPTURED WITH VISUAL ID TAGS (Red Numbers).
+You MUST use `click_element_by_id(id)` to interact with these elements.
+Do NOT use `browser_click` with text selectors anymore.
 
-=== Interactive Elements (Code View) ===
-{links_summary}
-
-=== Page Text (Summary) ===
-{text[:1000]}...
+=== INTERACTIVE ELEMENTS (ID Mapping) ===
+{map_text}
             """
         except Exception as e:
-            print(f"Screenshot Error: {e}") 
             return f"Shot Error: {e}"
+        
+async def click_element_by_id(id: int):
+    """
+    browser_screenshotで確認した「赤い数字（ID）」を指定してクリックする。
+    """
+    async with phantom_browser.lock:
+        if not phantom_browser.page: return "Error: Browser not open."
+        try:
+            # 注入された data-laru-id 属性を探してクリック
+            selector = f'[data-laru-id="{id}"]'
+            element = await phantom_browser.page.query_selector(selector)
+            
+            if element:
+                # 要素が見えているか確認してスクロール
+                await element.scroll_into_view_if_needed()
+                await asyncio.sleep(0.5)
+                try:
+                    await element.click(timeout=3000)
+                except:
+                    # JSクリック（強制実行）
+                    await phantom_browser.page.evaluate(f'document.querySelector(\'{selector}\').click()')
+                
+                return f"✅ Clicked Element ID [{id}]"
+            else:
+                return f"❌ Error: Element ID [{id}] not found. The page might have changed. Please take a screenshot again."
+        except Exception as e:
+            return f"Click Error: {e}"
         
 
 async def browser_click(target: str):
@@ -524,17 +645,28 @@ async def perform_login(url: str, email: str, password: str):
     async with phantom_browser.lock:
         if not phantom_browser.page: await phantom_browser.start()
         page = phantom_browser.page
+        
+        # ★追加: AIが「現在のURL」という文字列を渡してきた場合の救済措置
+        if url in ["現在のURL", "current", "", "None"] or not url.startswith("http"):
+            print(f"⚠️ URL補正: '{url}' -> '{page.url}'")
+            url = page.url
+
         try:
             print(f"🔐 Auto-Login started for {url}")
-            # 1. ページ移動
-            await page.goto(url, timeout=30000)
+            
+            # URLが現在のページと異なる場合のみ移動
+            if page.url != url:
+                try:
+                    await page.goto(url, timeout=30000)
+                except Exception as nav_err:
+                    return f"Error: Navigation failed to {url}. ({nav_err})"
+            
             await asyncio.sleep(2)
 
             # 2. メールアドレス入力欄を探して入力
-            # (name属性, type属性, placeholderなどから必死に探すロジック)
             email_selectors = [
                 'input[type="email"]', 'input[name*="email"]', 'input[name*="user"]', 'input[id*="email"]', 
-                'input[placeholder*="Email"]', 'input[placeholder*="メール"]'
+                'input[placeholder*="Email"]', 'input[placeholder*="メール"]', 'input[name="login"]'
             ]
             email_filled = False
             for sel in email_selectors:
@@ -562,16 +694,15 @@ async def perform_login(url: str, email: str, password: str):
             if not pass_filled: return "Error: Could not find Password input field."
 
             # 4. ログインボタン（Submit）を押す
-            # type="submit" を優先的に探す
             btn_selectors = [
                 'button[type="submit"]', 'input[type="submit"]', 
                 'button[class*="login"]', 'a[class*="login"]',
-                'button:has-text("Login")', 'button:has-text("ログイン")'
+                'button:has-text("Login")', 'button:has-text("ログイン")',
+                'div[role="button"]:has-text("Login")'
             ]
             clicked = False
             for sel in btn_selectors:
                 if await page.query_selector(sel):
-                    # SPA対応: クリックして少し待つ
                     await page.click(sel)
                     clicked = True
                     print(f"  - Clicked login button '{sel}'")
@@ -579,8 +710,8 @@ async def perform_login(url: str, email: str, password: str):
             
             if not clicked: return "Error: Could not find Login button."
 
-            # 5. 完了待ち（画面遷移を確認）
-            await asyncio.sleep(3)
+            # 5. 完了待ち
+            await asyncio.sleep(5) # 少し長めに待つ
             title = await page.title()
             return f"✅ Login Action Completed. Current Page Title: {title}"
 
@@ -733,24 +864,25 @@ async def process_command(command: str, current_channel: str):
             f"※この情報はユーザーには隠蔽されていますが、あなたは自由に使用できます。"
         )
 
-    # 3. ペルソナとシステムプロンプト (★ここを強化)
+    # 3. ペルソナとシステムプロンプト (Phase 2: 戦略モード搭載)
     persona = DEPT_PERSONAS.get(current_channel, DEPT_PERSONAS["CENTRAL"])
     system_prompt = (
         f"あなたは{persona['name']}。\n{persona['instructions']}{credentials_info}\n\n"
-        "【重要: 環境制約】\n"
-        "サーバー側のフォント欠落により、文字は「□□□」になる可能性があります。\n"
-        "必ず `browser_screenshot` の結果にある **「Interactive Elements」の `type`, `id`, `class`, `name`** を見て操作してください。\n\n"
-        "【重要: 必殺技の使用義務】\n"
-        "ログイン処理が必要だと判断した場合、ちまちまと `browser_type` で入力欄を探すことは**禁止**します。\n"
-        "**必ずツール `perform_login(url, email, password)` を一発で使用してください。**\n"
-        "このツールはセレクタ探索を自動化する最強の機能です。URLは現在のページ、またはユーザー指定のURLを使ってください。\n\n"
-        "【重要: 行動ルール】\n"
-        "1. **Report**: 報告は短く。\n"
-        "2. **Action**: `Action: browser_click()` のような**テキストを回答に含めることは厳禁**です。\n"
-        "   テキストではなく、必ず **GeminiのFunction Call機能** を実体として呼び出してください。"
+        "【重要: 戦略的タスク遂行 (Strategic Mode)】\n"
+        "複雑な依頼（例: 複数ページの巡回、比較調査、長時間の開発作業）を受けた場合は、"
+        "いきなり操作を始めず、**まず `manage_mission` ツールで計画を立ててください。**\n"
+        "1. `manage_mission('create', '...')` で目標を宣言。\n"
+        "2. `manage_mission('add_tasks', 'A実行, B実行...')` で手順を分解。\n"
+        "3. 実行中は `update_step` で進捗を管理し、得られた情報は `save_memo` で保存。\n"
+        "4. 迷ったら `read` で自分の現在地を確認。\n\n"
+        "【重要: 視覚操作 (Visual Mode)】\n"
+        "画面操作時は `browser_screenshot` を使い、画像内の**「赤い数字（ID）」**を見て、"
+        "**必ず `click_element_by_id(id)` で操作**してください。\n"
+        "※ただしログイン画面だけは `perform_login` を最優先してください。\n\n"
+        "【ルール】\n"
+        "・Function Callのみを使用すること（テキストでの言い訳禁止）。"
     )
 
-    # 4. 履歴構築
     history = [{"role": "user", "parts": [system_prompt]}]
     past = get_channel_logs(current_channel, 8) 
     for p in past:
@@ -767,17 +899,17 @@ async def process_command(command: str, current_channel: str):
 
     chat = model.start_chat(history=history)
 
-    # ★安全送信関数
+    # 安全送信関数
     async def safe_send_message(content_to_send):
         max_retries = 3
         for attempt in range(max_retries):
             try:
                 response = await asyncio.to_thread(chat.send_message, content_to_send)
-                if not response.candidates:
-                    print(f"⚠️ [Attempt {attempt+1}] Blocked/Empty Response.")
-                    raise Exception("Safety Block or Empty Response")
-                _ = response.parts 
+                if not response.candidates: raise Exception("Empty candidates")
                 return response
+            except IndexError:
+                print(f"⚠️ [Attempt {attempt+1}] IndexError (SDK Bug). Retrying...")
+                await asyncio.sleep(2)
             except Exception as e:
                 print(f"🔄 Retry ({attempt+1}/{max_retries}): {e}")
                 await asyncio.sleep((attempt + 1) * 2)
@@ -786,76 +918,71 @@ async def process_command(command: str, current_channel: str):
     try:
         # 5. 初回リクエスト
         response = await safe_send_message(command)
-        
         if not response:
-            await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": "⚠️ AIが応答を拒否しました。", "type": "error"}})
+            await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": "⚠️ AI応答エラー", "type": "error"}})
             return
 
-        # 6. 実行ループ（最大10ターン）
-        for i in range(10):
+        # 6. 実行ループ
+        for i in range(15): # タスクが複雑になるため回数を増加
             if not response.candidates: break
 
             part_with_fc = next((p for p in response.parts if p.function_call), None)
             text_part = "".join([p.text for p in response.parts if not p.function_call])
 
-            # ★鬼軍曹リトライロジック
+            # 鬼軍曹ロジック
             if not part_with_fc:
                 if text_part:
                     is_fake_code = "Action:" in text_part or "print(" in text_part or "browser_" in text_part
-                    
-                    if is_fake_code or ("完了" not in text_part and "終了" not in text_part and i < 8):
-                        print(f"👮 [{current_channel}] ツール不使用を検知(Turn {i})。強制リトライ。")
-                        
+                    if is_fake_code or ("完了" not in text_part and "終了" not in text_part and i < 12):
+                        print(f"👮 [{current_channel}] ツール不使用検知(Turn {i})。")
                         retry_success = False
                         current_text_part = text_part 
-                        
                         for retry_count in range(2): 
-                            msg = "続きを"
-                            if is_fake_code:
-                                msg = "【エラー】テキストで `Action:` と書くのは禁止。Function Callを使え。"
-                            else:
-                                # ★ここでも誘導を入れる
-                                msg = "状況報告は不要。ログインが必要なら `perform_login` を使え。次のアクションを直ちに行え。"
-
+                            msg = "続きを。状況報告不要。アクション（Function Call）を行え。"
+                            if "mission" in command or "計画" in command:
+                                msg += " 必要なら `manage_mission` を使え。"
+                            
                             history.append({"role": "model", "parts": [current_text_part]})
                             history.append({"role": "user", "parts": [msg]})
-                            
                             response = await safe_send_message(msg)
                             if not response: break
                             
                             part_with_fc = next((p for p in response.parts if p.function_call), None)
                             current_text_part = "".join([p.text for p in response.parts if not p.function_call])
-                            
                             if part_with_fc:
                                 retry_success = True
                                 break 
-                        
                         if not retry_success: break 
-                    else:
-                        break # 「完了」
-                else:
-                    break
+                    else: break
+                else: break
 
-            # 7. ツール実行処理
+            # 7. ツール実行
             if part_with_fc:
                 fc = part_with_fc.function_call
                 fname, args = fc.name, fc.args
                 await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"🔧 {fname}...", "type": "thinking"}})
                 
                 res = "Error"
-                if fname == "read_github_content": res = await read_github_content(args.get("target_repo"), args.get("file_path"))
-                elif fname == "commit_github_fix": res = await commit_github_fix(args.get("target_repo"), args.get("file_path"), args.get("new_content"), args.get("commit_message"))
-                elif fname == "fetch_repo_structure": res = await fetch_repo_structure(args.get("target_repo"))
-                elif fname == "perform_login": res = await perform_login(args.get("url"), args.get("email"), args.get("password"))
-                elif fname == "search_codebase": res = await search_codebase(args.get("target_repo"), args.get("query"))
+                safe_args = dict(args)
+                
+                # ★ここで channel_id を自動注入
+                if fname == "manage_mission":
+                    res = await manage_mission(safe_args.get("action"), current_channel, safe_args.get("data"))
+                elif fname == "read_github_content": res = await read_github_content(safe_args.get("target_repo"), safe_args.get("file_path"))
+                elif fname == "commit_github_fix": res = await commit_github_fix(safe_args.get("target_repo"), safe_args.get("file_path"), safe_args.get("new_content"), safe_args.get("commit_message"))
+                elif fname == "fetch_repo_structure": res = await fetch_repo_structure(safe_args.get("target_repo"))
+                elif fname == "perform_login": res = await perform_login(safe_args.get("url"), safe_args.get("email"), safe_args.get("password"))
+                elif fname == "search_codebase": res = await search_codebase(safe_args.get("target_repo"), safe_args.get("query"))
                 elif fname == "check_render_status": res = await check_render_status()
-                elif fname == "run_terminal_command": res = await run_terminal_command(args.get("command"))
-                elif fname == "browser_navigate": res = await browser_navigate(args.get("url"))
+                elif fname == "run_terminal_command": res = await run_terminal_command(safe_args.get("command"))
+                elif fname == "browser_navigate": res = await browser_navigate(safe_args.get("url"))
                 elif fname == "browser_screenshot": res = await browser_screenshot()
-                elif fname == "browser_click": res = await browser_click(args.get("target"))
-                elif fname == "browser_type": res = await browser_type(args.get("target"), args.get("text"))
-                elif fname == "browser_scroll": res = await browser_scroll(args.get("direction"))
-                elif fname == "run_test_validation": res = await run_test_validation(args.get("target_file"), args.get("test_code"))
+                # Phase 1 の視覚クリックツール
+                elif fname == "click_element_by_id": res = await click_element_by_id(int(safe_args.get("id")))
+                elif fname == "browser_click": res = await browser_click(safe_args.get("target"))
+                elif fname == "browser_type": res = await browser_type(safe_args.get("target"), safe_args.get("text"))
+                elif fname == "browser_scroll": res = await browser_scroll(safe_args.get("direction"))
+                elif fname == "run_test_validation": res = await run_test_validation(safe_args.get("target_file"), safe_args.get("test_code"))
 
                 role_res = {'result': str(res)}
                 if "Error" in str(res): role_res['result'] = f"ERROR: {str(res)}"
@@ -887,9 +1014,10 @@ safety_settings = [
 
 model = genai.GenerativeModel(
     model_name='gemini-2.0-flash',
-    safety_settings=safety_settings,  # ★ここを追加
+    safety_settings=safety_settings,
     tools=[
-        perform_login,
+        manage_mission,  # ★追加: 戦略脳
+        perform_login, click_element_by_id, # Phase 1の最強ツールたち
         commit_github_fix, read_github_content, fetch_repo_structure, search_codebase,
         check_render_status, run_terminal_command, run_test_validation,
         browser_navigate, browser_screenshot, browser_click, browser_type, browser_scroll
