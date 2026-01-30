@@ -730,17 +730,20 @@ async def process_command(command: str, current_channel: str):
             f"Password: {settings['password']}\n"
             f"Login Type: {settings['login_type']}\n"
             f"Memo: {settings['memo']}\n"
-            f"※ログインが必要な場面では、ユーザーに聞かず、黙ってこの情報を使用してください。"
+            f"※この情報はユーザーには隠蔽されていますが、あなたは自由に使用できます。"
         )
 
-    # 3. ペルソナとシステムプロンプト
+    # 3. ペルソナとシステムプロンプト (★ここを強化)
     persona = DEPT_PERSONAS.get(current_channel, DEPT_PERSONAS["CENTRAL"])
     system_prompt = (
         f"あなたは{persona['name']}。\n{persona['instructions']}{credentials_info}\n\n"
         "【重要: 環境制約】\n"
         "サーバー側のフォント欠落により、文字は「□□□」になる可能性があります。\n"
-        "必ず `browser_screenshot` の結果にある **「Interactive Elements」の `type`, `id`, `class`, `name`** を見て操作してください。\n"
-        "特にログインボタンは `type='submit'` や `class` 属性に注目して特定してください。\n\n"
+        "必ず `browser_screenshot` の結果にある **「Interactive Elements」の `type`, `id`, `class`, `name`** を見て操作してください。\n\n"
+        "【重要: 必殺技の使用義務】\n"
+        "ログイン処理が必要だと判断した場合、ちまちまと `browser_type` で入力欄を探すことは**禁止**します。\n"
+        "**必ずツール `perform_login(url, email, password)` を一発で使用してください。**\n"
+        "このツールはセレクタ探索を自動化する最強の機能です。URLは現在のページ、またはユーザー指定のURLを使ってください。\n\n"
         "【重要: 行動ルール】\n"
         "1. **Report**: 報告は短く。\n"
         "2. **Action**: `Action: browser_click()` のような**テキストを回答に含めることは厳禁**です。\n"
@@ -764,48 +767,38 @@ async def process_command(command: str, current_channel: str):
 
     chat = model.start_chat(history=history)
 
-    # ★ここが新機能: 安全に送信し、エラーなら自動リトライする内部関数
+    # ★安全送信関数
     async def safe_send_message(content_to_send):
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                # 送信
                 response = await asyncio.to_thread(chat.send_message, content_to_send)
-                
-                # 安全チェック（ここで list index out of range を防ぐ）
                 if not response.candidates:
                     print(f"⚠️ [Attempt {attempt+1}] Blocked/Empty Response.")
                     raise Exception("Safety Block or Empty Response")
-                
-                # 念のためpartsアクセスもチェック
                 _ = response.parts 
-                
                 return response
             except Exception as e:
                 print(f"🔄 Retry ({attempt+1}/{max_retries}): {e}")
-                await asyncio.sleep((attempt + 1) * 2) # 少し待つ
-        
-        # 3回失敗したらNoneを返す
+                await asyncio.sleep((attempt + 1) * 2)
         return None
 
     try:
-        # 5. 初回リクエスト（安全関数を使用）
+        # 5. 初回リクエスト
         response = await safe_send_message(command)
         
         if not response:
-            await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": "⚠️ AIが応答を拒否しました（セキュリティ保護のため）。パスワード等を直接入力せず、設定機能の利用を検討してください。", "type": "error"}})
+            await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": "⚠️ AIが応答を拒否しました。", "type": "error"}})
             return
 
-        # ---------------------------------------------------------
         # 6. 実行ループ（最大10ターン）
-        # ---------------------------------------------------------
         for i in range(10):
             if not response.candidates: break
 
             part_with_fc = next((p for p in response.parts if p.function_call), None)
             text_part = "".join([p.text for p in response.parts if not p.function_call])
 
-            # ★ツール呼び出しがない場合の「鬼軍曹」リトライロジック
+            # ★鬼軍曹リトライロジック
             if not part_with_fc:
                 if text_part:
                     is_fake_code = "Action:" in text_part or "print(" in text_part or "browser_" in text_part
@@ -816,17 +809,17 @@ async def process_command(command: str, current_channel: str):
                         retry_success = False
                         current_text_part = text_part 
                         
-                        for retry_count in range(2): # 叱責リトライ回数
+                        for retry_count in range(2): 
                             msg = "続きを"
                             if is_fake_code:
                                 msg = "【エラー】テキストで `Action:` と書くのは禁止。Function Callを使え。"
                             else:
-                                msg = "状況報告は不要。次のアクション（ツール実行）を直ちに行え。"
+                                # ★ここでも誘導を入れる
+                                msg = "状況報告は不要。ログインが必要なら `perform_login` を使え。次のアクションを直ちに行え。"
 
                             history.append({"role": "model", "parts": [current_text_part]})
                             history.append({"role": "user", "parts": [msg]})
                             
-                            # リトライ送信も安全関数で行う
                             response = await safe_send_message(msg)
                             if not response: break
                             
@@ -843,16 +836,13 @@ async def process_command(command: str, current_channel: str):
                 else:
                     break
 
-            # -----------------------------------------------------
             # 7. ツール実行処理
-            # -----------------------------------------------------
             if part_with_fc:
                 fc = part_with_fc.function_call
                 fname, args = fc.name, fc.args
                 await manager.broadcast({"type": "LOG", "channelId": current_channel, "payload": {"msg": f"🔧 {fname}...", "type": "thinking"}})
                 
                 res = "Error"
-                # ツール実行
                 if fname == "read_github_content": res = await read_github_content(args.get("target_repo"), args.get("file_path"))
                 elif fname == "commit_github_fix": res = await commit_github_fix(args.get("target_repo"), args.get("file_path"), args.get("new_content"), args.get("commit_message"))
                 elif fname == "fetch_repo_structure": res = await fetch_repo_structure(args.get("target_repo"))
@@ -870,11 +860,10 @@ async def process_command(command: str, current_channel: str):
                 role_res = {'result': str(res)}
                 if "Error" in str(res): role_res['result'] = f"ERROR: {str(res)}"
 
-                # ★修正: ツール結果の送信も安全関数を使う（ここが一番重要）
                 response = await safe_send_message(genai.protos.Content(
                     role='function', parts=[genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fname, response=role_res))]))
                 
-                if not response: break # エラーならループ終了
+                if not response: break
             else:
                 break
         
